@@ -64,6 +64,9 @@ def test_columns_accepts_letter_index_or_text():
     assert (item.id, item.gold, item.options) == ("test-7", 1, ("x", "y"))
     assert to_item({**row, "a": 0}).gold == 0
     assert to_item({**row, "a": "B"}).gold == 1
+    with_subject = columns(question="q", options="opts.text", answer="a", subject="s")
+    assert with_subject({**row, "s": None}).subject is None  # nulo não vira a string "None"
+    assert with_subject({**row, "s": " direito "}).subject == "direito"
 
 
 def test_select_shots_is_deterministic_and_excludes_self():

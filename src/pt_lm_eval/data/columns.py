@@ -35,11 +35,19 @@ def columns(
             question=str(get_path(row, question)),
             options=tuple(opts),
             gold=answer_index(get_path(row, answer), opts),
-            subject=str(get_path(row, subject)) if subject else None,
-            context=str(get_path(row, context)) if context else None,
+            subject=_optional(row, subject),
+            context=_optional(row, context),
         )
 
     return to_item
+
+
+def _optional(row: dict[str, Any], path: str | None) -> str | None:
+    """Coluna opcional: ausente, nula ou vazia vira None (e não a string "None")."""
+    if not path:
+        return None
+    value = get_path(row, path)
+    return str(value).strip() or None if value is not None else None
 
 
 def get_path(row: dict[str, Any], path: str) -> Any:

@@ -104,16 +104,20 @@ class OpenAICompatBackend:
 
     async def _generate_one(self, request: GenerateRequest) -> GenerateResponse:
         params = {"temperature": 0, **self.s.generate_params}
-        max_tokens = request.max_tokens or params.pop("max_tokens", DEFAULT_MAX_TOKENS)
-        params.pop("max_tokens", None)
-        payload: dict[str, Any] = {"model": self.s.model, self.s.max_tokens_field: max_tokens}
+        # Vale o maior entre o pedido da tarefa e o do modelo: modelos de raciocínio
+        # configurados com mais tokens não são cortados pelo limite de uma tarefa.
+        limits = [n for n in (request.max_tokens, params.pop("max_tokens", None)) if n]
+        payload: dict[str, Any] = {
+            "model": self.s.model,
+            self.s.max_tokens_field: max(limits, default=DEFAULT_MAX_TOKENS),
+        }
         if request.stop:
             payload["stop"] = list(request.stop)
         payload.update({k: v for k, v in params.items() if v is not None})
         try:
             if self.s.chat:
-                messages = [{"role": "user", "content": request.prompt}]
-                if self.s.system_prompt:
+                messages = list(request.messages or [{"role": "user", "content": request.prompt}])
+                if self.s.system_prompt and messages[0]["role"] != "system":
                     messages.insert(0, {"role": "system", "content": self.s.system_prompt})
                 data = await self._post("/chat/completions", {**payload, "messages": messages})
                 choice = data["choices"][0]

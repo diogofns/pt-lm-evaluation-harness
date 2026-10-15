@@ -46,7 +46,7 @@ def aggregate(records: list[dict]) -> dict[str, Any]:
     """Média ± stderr por métrica; com várias matérias, a principal é a média entre matérias."""
     by_subject: dict[str, list[dict]] = defaultdict(list)
     for r in records:
-        by_subject[r.get("subject") or "_"].append(r)
+        by_subject[r.get("subject") or "(sem matéria)"].append(r)
     micro = _mean_metrics(records)
     if len(by_subject) == 1:
         return {"metrics": micro}
@@ -72,7 +72,7 @@ def build_result(
     model = step.model
     return {
         "schema": SCHEMA,
-        "pt_lm_eval": _version(),
+        "pt_lm_eval": package_version(),
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "experiment": cfg.experiment,
         "benchmark": {
@@ -121,7 +121,7 @@ def _metric_names(records: list[dict]) -> list[str]:
     return list(names)
 
 
-def _version() -> str:
+def package_version() -> str:
     try:
         return version("pt-lm-eval")
     except PackageNotFoundError:

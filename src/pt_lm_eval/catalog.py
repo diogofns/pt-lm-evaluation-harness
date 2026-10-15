@@ -99,10 +99,12 @@ def _check_one(name: str, lock: dict, update_lock: bool) -> bool:
 
     golds = Counter(getattr(it, "gold", None) for it in items)
     n_opts = Counter(len(getattr(it, "options", ())) for it in items)
-    subjects = {getattr(it, "subject", None) for it in items}
+    subjects = Counter(getattr(it, "subject", None) for it in items)
+    no_subject = subjects.pop(None, 0)
     status = "ok" if not problems else "FALHOU"
     print(
-        f"{status} {key}: {len(items)} itens ({loaded.discarded} descartados), {len(subjects)} matérias, "
+        f"{status} {key}: {len(items)} itens ({loaded.discarded} descartados), {len(subjects)} matérias"
+        f"{f' + {no_subject} itens sem matéria' if no_subject and subjects else ''}, "
         f"opções {dict(sorted(n_opts.items()))}"
     )
     majority = max(golds.values()) / len(items)

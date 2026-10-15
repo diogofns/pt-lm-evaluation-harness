@@ -70,6 +70,9 @@ class GenerateRequest:
     prompt: str
     max_tokens: int | None = None  # None = padrão do modelo
     stop: tuple[str, ...] = ()
+    # Conversa pronta (lista de {"role", "content"}). Se presente, modelos de chat a
+    # recebem no lugar de `prompt`, que fica como versão em texto para o registro.
+    messages: tuple[dict[str, str], ...] | None = None
 
 
 Request = LoglikelihoodRequest | GenerateRequest

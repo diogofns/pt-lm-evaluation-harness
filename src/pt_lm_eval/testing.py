@@ -11,7 +11,9 @@ def test_minha_avaliacao():
 
 from __future__ import annotations
 
-from .catalog import CARD_SECTIONS, card_problems
+from pathlib import Path
+
+from .catalog import CARD_SECTIONS, card_problems, check
 from .core.protocols import BENCHMARKS, EVALUATIONS
 from .core.types import GenerateResponse, Item, LoglikelihoodResponse, Request, Response
 from .data.loading import load_items
@@ -32,8 +34,12 @@ def check_evaluation(name: str, item: Item, shot: Item | None = None) -> None:
             assert isinstance(value, float), f"{name}: métrica {metric} não é float"
 
 
-def check_benchmark(name: str) -> None:
-    """O benchmark carrega, todos os itens servem às avaliações declaradas e o cartão está completo."""
+def check_benchmark(name: str, lock: str | Path | None = None) -> None:
+    """O benchmark carrega, todos os itens servem às avaliações declaradas e o cartão está completo.
+
+    Com `lock`, também exige que os prompts batam com a trava de versões, como o
+    `pt-lm-eval benchmarks check` (prompt mudou sem a versão mudar = falha).
+    """
     bench = BENCHMARKS.get(name)
     assert bench.version, f"{name}: sem versão"
     for ev_name in bench.evaluations:
@@ -44,6 +50,8 @@ def check_benchmark(name: str) -> None:
     assert loaded.items, f"{name}: nenhum item carregado"
     for ev_name in bench.evaluations:
         check_evaluation(ev_name, loaded.items[0], loaded.pool[-1])
+    if lock is not None:
+        assert check([name], Path(lock)), f"{name}: falhou na trava {lock} (veja a saída acima)"
 
 
 def _fake_response(request: Request) -> Response:

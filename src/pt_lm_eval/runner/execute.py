@@ -17,6 +17,7 @@ from ..core.protocols import BACKENDS, BENCHMARKS, EVALUATIONS, REPORTERS, Backe
 from ..core.types import Item, Request, Response, Scored
 from ..data.fewshot import select_shots
 from ..data.loading import load_items, prompt_signature
+from ..integrations.lm_eval import is_lm_eval, run_lm_eval_step
 from ..report.results import build_result, describe_requests, write_result
 from ..servers import max_model_len, model_endpoint, slug
 from .config import ExperimentConfig
@@ -57,6 +58,11 @@ async def _run_model(steps: Sequence[Step], backend: Backend, cfg: ExperimentCon
 
 
 async def run_step(step: Step, backend: Backend, cfg: ExperimentConfig) -> dict:
+    stem = cfg.out_dir / slug(step.model.display_name) / f"{slug(step.benchmark)}.{step.evaluation}"
+    stem.parent.mkdir(parents=True, exist_ok=True)
+    if is_lm_eval(step.benchmark):
+        log.info("%s: tarefa do lm-eval", step.benchmark)
+        return await run_lm_eval_step(step, backend, cfg, stem)
     bench = BENCHMARKS.get(step.benchmark)
     evaluation = EVALUATIONS.get(step.evaluation)
     loaded = load_items(step.benchmark)
@@ -75,7 +81,6 @@ async def run_step(step: Step, backend: Backend, cfg: ExperimentConfig) -> dict:
         for it in selected
     }
     prompt_sha = prompt_signature(evaluation, items, pool)
-    stem = cfg.out_dir / slug(step.model.display_name) / f"{step.benchmark}.{step.evaluation}"
     samples_path = Path(f"{stem}.samples.jsonl")
     fingerprint = _fingerprint(step, bench.version, prompt_sha, cfg.seed)
     records = _resume(samples_path, fingerprint)

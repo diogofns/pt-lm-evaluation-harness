@@ -31,8 +31,13 @@ def main(argv: list[str] | None = None) -> int:
     preview.add_argument("--num-fewshot", type=int, default=0)
     check = bsub.add_parser("check", help="valida dados, prompts, cartão e versão")
     check.add_argument("names", nargs="*")
-    check.add_argument("--all", action="store_true")
-    check.add_argument("--lock", type=Path, default=Path("benchmarks.lock.json"))
+    check.add_argument("--all", action="store_true", help="todos os benchmarks instalados")
+    check.add_argument(
+        "--lock",
+        type=Path,
+        default=Path("benchmarks.lock.json"),
+        help="trava de versões (padrão: ./benchmarks.lock.json, no diretório atual)",
+    )
     check.add_argument("--update-lock", action="store_true", help="registra os prompts atuais na trava")
 
     args = parser.parse_args(argv)
