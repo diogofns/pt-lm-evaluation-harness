@@ -86,9 +86,16 @@ def test_truncate_left_keeps_continuation():
 
 def test_continuation_logprob_checks_token_alignment():
     ids = [10, 11, 12]
-    prompt_logprobs = [None, {"11": {"logprob": -1.0, "rank": 1}}, {"12": {"logprob": -2.0, "rank": 3}}]
+    prompt_logprobs = [
+        None,
+        {"11": {"logprob": -1.0, "rank": 1}},
+        {"12": {"logprob": -2.0, "rank": 3}, "7": {"logprob": -0.5, "rank": 1}},
+    ]
     r = _continuation_logprob(prompt_logprobs, ids, start=1)
     assert (r.logprob, r.is_greedy, r.n_tokens) == (-3.0, False, 2)
+    # Empate exato com o mais provável conta como guloso, mesmo com rank 2.
+    tie = [None, {"11": {"logprob": -1.0, "rank": 2}, "5": {"logprob": -1.0, "rank": 1}}]
+    assert _continuation_logprob(tie, [10, 11], start=1).is_greedy
     with pytest.raises(KeyError):  # servidor tokenizou diferente: falha alta, nunca silenciosa
         _continuation_logprob(prompt_logprobs, [10, 99, 12], start=1)
 

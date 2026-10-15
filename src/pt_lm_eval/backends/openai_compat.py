@@ -78,7 +78,7 @@ class OpenAICompatBackend:
             "prompt": [ids for ids, _ in batch],
             "max_tokens": 1,
             "temperature": 0,
-            "prompt_logprobs": 0,  # só o token do prompt, com seu rank
+            "prompt_logprobs": 1,  # o token do prompt e o mais provável em cada posição
         }
         data = await self._post("/completions", payload)
         choices = sorted(data["choices"], key=lambda c: c["index"])
@@ -164,14 +164,19 @@ class OpenAICompatBackend:
 
 
 def _continuation_logprob(prompt_logprobs: list[Any], ids: list[int], start: int) -> LoglikelihoodResponse:
-    """Soma os logprobs dos tokens a partir de `start`, conferindo que são os tokens enviados."""
+    """Soma os logprobs dos tokens a partir de `start`, conferindo que são os tokens enviados.
+
+    `is_greedy` compara valores, como o lm-eval: um token empatado com o mais provável
+    conta como guloso (empates exatos são comuns em bf16; o `rank` do vLLM desempata).
+    """
     if start < 1:
         raise ValueError("a continuação precisa de ao menos um token de contexto antes dela")
     total, greedy = 0.0, True
     for pos in range(start, len(ids)):
-        entry = prompt_logprobs[pos][str(ids[pos])]  # KeyError = servidor tokenizou diferente
-        total += entry["logprob"]
-        greedy = greedy and entry["rank"] == 1
+        candidates = prompt_logprobs[pos]
+        logprob = candidates[str(ids[pos])]["logprob"]  # KeyError = servidor tokenizou diferente
+        total += logprob
+        greedy = greedy and logprob >= max(c["logprob"] for c in candidates.values())
     return LoglikelihoodResponse(logprob=total, is_greedy=greedy, n_tokens=len(ids) - start)
 
 
