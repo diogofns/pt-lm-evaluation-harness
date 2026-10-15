@@ -1,0 +1,71 @@
+"""Conversão declarativa de linhas em `MCQItem`, para datasets com colunas comuns."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any
+
+from ..core.types import LETTERS, MCQItem
+
+
+def columns(
+    *,
+    question: str,
+    options: str | Sequence[str],
+    answer: str,
+    id: str | None = None,
+    subject: str | None = None,
+    context: str | None = None,
+) -> Callable[[dict[str, Any]], MCQItem]:
+    """Monta um `to_item` a partir de nomes de colunas.
+
+    - `options`: caminho para uma lista (ex.: "choices.text") ou lista de colunas
+      (ex.: ["A", "B", "C", "D"]).
+    - `answer`: letra ("B", "(b)"), índice 0-based ou o texto da opção correta.
+    - Caminhos com ponto acessam campos aninhados.
+    """
+
+    def to_item(row: dict[str, Any]) -> MCQItem:
+        if isinstance(options, str):
+            opts = [str(o) for o in get_path(row, options)]
+        else:
+            opts = [str(get_path(row, col)) for col in options]
+        return MCQItem(
+            id=str(get_path(row, id)) if id else default_id(row),
+            question=str(get_path(row, question)),
+            options=tuple(opts),
+            gold=answer_index(get_path(row, answer), opts),
+            subject=str(get_path(row, subject)) if subject else None,
+            context=str(get_path(row, context)) if context else None,
+        )
+
+    return to_item
+
+
+def get_path(row: dict[str, Any], path: str) -> Any:
+    value: Any = row
+    for key in path.split("."):
+        value = value[key]
+    return value
+
+
+def default_id(row: dict[str, Any]) -> str:
+    return f"{row['_split']}-{row['_index']}"
+
+
+def letter_index(value: str) -> int:
+    """'B', ' b ', '(B)', 'B)' → 1."""
+    letter = str(value).strip().strip("()").strip().upper()
+    if len(letter) != 1 or letter not in LETTERS:
+        raise ValueError(f"não é uma letra de alternativa: {value!r}")
+    return LETTERS.index(letter)
+
+
+def answer_index(value: Any, options: Sequence[str]) -> int:
+    """Interpreta a resposta como índice, letra ou texto da opção, nessa ordem."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    text = str(value).strip()
+    if text in options:
+        return list(options).index(text)
+    return letter_index(text)

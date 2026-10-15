@@ -1,0 +1,42 @@
+# Experimento de exemplo. Rode com:
+#   pt-lm-eval run configs/exemplo.yaml --dry-run   (só o plano)
+#   pt-lm-eval run configs/exemplo.yaml
+
+experiment: exemplo
+output_dir: output
+seed: 1234
+limit: 100              # itens por benchmark, sorteados com a seed (omita para usar todos)
+num_fewshot: 0          # padrão; cada benchmark pode sobrescrever
+fewshot_strategy: random  # random | first_n
+
+server:
+  kind: vllm
+  mode: local           # local (processo) | docker (exige image)
+  port: 8000
+  executable: vllm      # caminho do binário do vLLM, se não estiver no PATH
+  # image: vllm/vllm-openai:v0.24.0
+  args:                 # flags do `vllm serve`, em snake_case
+    max_model_len: 8192
+    gpu_memory_utilization: 0.85
+
+benchmarks:
+  - energy_regulacao                                   # todas as avaliações declaradas
+  - name: mmmlu_pt_br
+    evaluations: [mcf, cf]
+    num_fewshot: 5
+
+models:
+  - name: Qwen/Qwen2.5-0.5B
+    type: base                                         # log-likelihood + geração sem chat template
+
+  - name: Qwen/Qwen3-4B-Instruct-2507
+    type: instruct                                     # log-likelihood + geração com chat template
+    generate: {max_tokens: 1024}
+
+  # - name: gpt-5.4-mini
+  #   type: api                                        # só geração; mcf/cf aparecem como "pulado"
+  #   base_url: https://api.openai.com/v1
+  #   api_key_env: OPENAI_API_KEY
+  #   generate: {reasoning_effort: low, temperature: null}
+
+reporters: [csv]

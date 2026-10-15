@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pt-lm-eval"
+version = "0.1.0"
+description = "Avaliador de LLMs em português: pequeno, auditável e extensível por plugins."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "datasets>=2.19",
+    "httpx>=0.27",
+    "pyyaml>=6",
+    "tqdm>=4.66",
+    "transformers>=4.44",
+]
+
+[project.optional-dependencies]
+lm-eval = ["lm-eval>=0.4.9"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+pt-lm-eval = "pt_lm_eval.cli:main"
+
+# Tudo que vem com o projeto é registrado como plugin, igual ao que vier de fora.
+# Cada entrada aponta para um módulo; importá-lo registra o que ele define.
+[project.entry-points."pt_lm_eval.evaluations"]
+mcq_loglikelihood = "pt_lm_eval.evaluations.mcq_loglikelihood"
+mcq_generate = "pt_lm_eval.evaluations.mcq_generate"
+
+[project.entry-points."pt_lm_eval.backends"]
+openai_compat = "pt_lm_eval.backends.openai_compat"
+
+[project.entry-points."pt_lm_eval.reporters"]
+csv = "pt_lm_eval.report.csv_reporter"
+
+[project.entry-points."pt_lm_eval.benchmarks"]
+energy_regulacao = "pt_lm_eval.benchmarks.energy_regulacao.benchmark"
+mmlu_pt = "pt_lm_eval.benchmarks.mmlu_pt.benchmark"
+mmlu_pt_sintetico = "pt_lm_eval.benchmarks.mmlu_pt_sintetico.benchmark"
+mmmlu_pt_br = "pt_lm_eval.benchmarks.mmmlu_pt_br.benchmark"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pt_lm_eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gpu: precisa de GPU e vLLM (pytest -m gpu)",
+    "network: baixa datasets do Hugging Face (pytest -m network)",
+    "parity: compara com o lm-eval (pytest -m parity)",
+]
+addopts = "-m 'not gpu and not network and not parity'"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF", "PLW1510"]
+ignore = ["E731", "RUF001", "RUF002", "RUF003"]  # lambdas nomeadas; acentos e "×" nos textos em PT
