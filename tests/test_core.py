@@ -146,3 +146,28 @@ def test_config_rejects_unknown_keys():
         parse_config({**base, "modles": []})
     with pytest.raises(ValueError, match="type deve ser"):
         parse_config({**base, "models": [{"name": "m", "type": "chat"}]})
+
+
+def test_stop_sequences_only_without_chat(monkeypatch):
+    """Em chat, stops cortariam o raciocínio quando o modelo cita o enunciado."""
+    import asyncio
+
+    from pt_lm_eval.backends.openai_compat import OpenAICompatBackend, OpenAICompatSettings
+    from pt_lm_eval.core.types import GenerateRequest
+
+    sent = {}
+
+    async def fake_post(self, path, payload):
+        sent[path] = payload
+        key = "message" if path == "/chat/completions" else "text"
+        body = {"content": "Resposta: A"} if key == "message" else "Resposta: A"
+        return {"choices": [{key: body, "finish_reason": "stop"}]}
+
+    monkeypatch.setattr(OpenAICompatBackend, "_post", fake_post)
+    request = GenerateRequest(prompt="Pergunta: ?", stop=("\n\nPergunta:",))
+    for chat in (True, False):
+        backend = OpenAICompatBackend(OpenAICompatSettings(model="m", base_url="http://x/v1", chat=chat))
+        (response,) = asyncio.run(backend.generate([request]))
+        assert response.text == "Resposta: A"
+    assert "stop" not in sent["/chat/completions"]
+    assert sent["/completions"]["stop"] == ["\n\nPergunta:"]

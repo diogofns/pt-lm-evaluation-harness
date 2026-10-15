@@ -111,7 +111,10 @@ class OpenAICompatBackend:
             "model": self.s.model,
             self.s.max_tokens_field: max(limits, default=DEFAULT_MAX_TOKENS),
         }
-        if request.stop:
+        # Stops só em completions: servem para o modelo base não emendar a próxima
+        # questão. Em chat, o vLLM os aplica também ao raciocínio e corta o <think>
+        # quando o modelo cita o enunciado.
+        if request.stop and not self.s.chat:
             payload["stop"] = list(request.stop)
         payload.update({k: v for k, v in params.items() if v is not None})
         try:
