@@ -45,6 +45,7 @@ class Benchmark:
     evaluations: tuple[str, ...]
     fewshot_source: Source | None = None  # None = sorteia do próprio conjunto, sem o item
     description: str = ""
+    card: Path | None = None  # README.md com fonte, licença, construção etc.
 
 
 class Evaluation(Protocol):

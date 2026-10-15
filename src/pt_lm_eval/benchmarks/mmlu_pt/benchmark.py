@@ -4,6 +4,8 @@ Quatro variantes (graduação e ensino médio, completo e difícil). Cada split 
 dataset é uma área (ex.: law, stem) e vira a matéria do item.
 """
 
+from pathlib import Path
+
 from pt_lm_eval import BENCHMARKS, Benchmark, HFDataset, MCQItem, letter_index
 
 from .parsing import parse_alternatives
@@ -44,5 +46,6 @@ for name, repo in [
             source=HFDataset(repo, split="*", revision=REVISIONS[repo]),
             to_item=to_item,
             evaluations=("mcf", "cf", "gen"),
+            card=Path(__file__).with_name("README.md"),
         ),
     )

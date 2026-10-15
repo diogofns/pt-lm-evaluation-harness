@@ -1,0 +1,23 @@
+# Use este arquivo só se o benchmark ficar num pacote seu, fora do repositório do
+# pt-lm-eval. Para contribuir com o repositório principal, veja CONTRIBUTING.md.
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meu-benchmark-pt"
+version = "0.1.0"
+description = "Benchmark X para o pt-lm-eval"
+requires-python = ">=3.11"
+dependencies = ["pt-lm-eval>=0.1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+# Esta linha é o que faz o pt-lm-eval encontrar o benchmark depois de instalado.
+[project.entry-points."pt_lm_eval.benchmarks"]
+meu_benchmark = "meu_benchmark.benchmark"
+
+[tool.hatch.build.targets.wheel]
+packages = ["meu_benchmark"]

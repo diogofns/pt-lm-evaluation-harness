@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import subprocess
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 HOST = "127.0.0.1"
+log = logging.getLogger("pt_lm_eval")
 _DOCKER_ENV = ("CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "HF_TOKEN", "HF_HUB_CACHE")
 
 
@@ -100,15 +102,20 @@ def _container_running(container: str) -> bool:
 
 
 def _wait_ready(port: int, alive: Any, log_path: Path, timeout: int) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    start = time.monotonic()
+    next_report = start + 60
+    while time.monotonic() < start + timeout:
         if not alive():
             raise RuntimeError(f"vLLM terminou antes de ficar pronto.\n--- fim do log ---\n{_tail(log_path)}")
         try:
             with urllib.request.urlopen(f"http://{HOST}:{port}/health", timeout=5):
+                log.info("vLLM pronto em %ds", time.monotonic() - start)
                 return
         except (urllib.error.URLError, OSError):
             time.sleep(2)
+        if time.monotonic() >= next_report:  # download de pesos não aparece no log do vLLM
+            log.info("aguardando vLLM há %ds (log: %s)", time.monotonic() - start, log_path)
+            next_report += 60
     raise TimeoutError(f"vLLM não ficou pronto em {timeout}s.\n--- fim do log ---\n{_tail(log_path)}")
 
 

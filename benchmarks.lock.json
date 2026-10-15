@@ -1,0 +1,58 @@
+{
+  "energy_regulacao@1.0": {
+    "source": "hf:cemig-ceia/energy-eval:train@cac76ae9456fc3c9354d761880bc3c3a5b54d1e1",
+    "prompts": {
+      "mcf": "e925643a7e2eac5e",
+      "cf": "6c4f652523b5b196",
+      "gen": "43b4006cbbd6a6a3"
+    }
+  },
+  "mmlu_pt_high_school@1.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-full:*@b29d6ca3887d250114b543974fa8845a3143e229",
+    "prompts": {
+      "mcf": "f53537270927fe2b",
+      "cf": "b8a3a8c0d8547356",
+      "gen": "90a3b2484ff7517f"
+    }
+  },
+  "mmlu_pt_high_school_hard@1.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
+    "prompts": {
+      "mcf": "43589e88ccedce9d",
+      "cf": "bd1765346ee87e80",
+      "gen": "eb18911549595817"
+    }
+  },
+  "mmlu_pt_sintetico@1.0": {
+    "source": "hf:cemig-ceia/benchmark_Qwen3-235B-A22B_MMLU_v2:train@831ba6bbae5b6057fbc3cae40e13eae7b55ebb26",
+    "prompts": {
+      "mcf": "76618da3573f6228",
+      "cf": "9e9dd41cf624939a",
+      "gen": "24830205e0e8f7cd"
+    }
+  },
+  "mmlu_pt_undergraduate@1.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-full:*@98cc293cd60c3779c2b1da1dd5abb3b47d9dee42",
+    "prompts": {
+      "mcf": "3096b91250f8b8c4",
+      "cf": "868098de5aacea2e",
+      "gen": "6b06ccdd66887147"
+    }
+  },
+  "mmlu_pt_undergraduate_hard@1.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
+    "prompts": {
+      "mcf": "f1090b1d7a1606d9",
+      "cf": "458ba9f1a3f1dac1",
+      "gen": "3c853ab64d2ac6f7"
+    }
+  },
+  "mmmlu_pt_br@1.0": {
+    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+    "prompts": {
+      "mcf": "ee738cad64632e3f",
+      "cf": "d72773df35c7ccd3",
+      "gen": "8e2f7e9614d58386"
+    }
+  }
+}

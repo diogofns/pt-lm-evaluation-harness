@@ -9,14 +9,14 @@ import logging
 import random
 import shutil
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
-from functools import cache
+from dataclasses import asdict
 from itertools import groupby
 from pathlib import Path
 
-from ..core.protocols import BACKENDS, BENCHMARKS, EVALUATIONS, REPORTERS, Backend, Evaluation
+from ..core.protocols import BACKENDS, BENCHMARKS, EVALUATIONS, REPORTERS, Backend
 from ..core.types import Item, Request, Response, Scored
 from ..data.fewshot import select_shots
+from ..data.loading import load_items, prompt_signature
 from ..report.results import build_result, describe_requests, write_result
 from ..servers import max_model_len, model_endpoint, slug
 from .config import ExperimentConfig
@@ -119,40 +119,6 @@ async def _answer(backend: Backend, requests: list[Request]) -> list[Response]:
             for i, resp in zip(idx, await method([requests[i] for i in idx]), strict=True):
                 answers[i] = resp
     return answers  # type: ignore[return-value]
-
-
-@dataclass(frozen=True)
-class Loaded:
-    items: list[Item]
-    pool: list[Item]  # candidatos a few-shot
-    discarded: int  # linhas para as quais to_item devolveu None
-
-
-@cache
-def load_items(name: str) -> Loaded:
-    """Itens de um benchmark, carregados uma vez por processo."""
-    bench = BENCHMARKS.get(name)
-    rows = bench.source.load()
-    items = [it for it in map(bench.to_item, rows) if it is not None]
-    ids = [it.id for it in items]
-    if len(set(ids)) != len(ids):
-        raise ValueError(f"{name}: há IDs de item repetidos")
-    if bench.fewshot_source:
-        pool = [it for it in map(bench.to_item, bench.fewshot_source.load()) if it is not None]
-    else:
-        pool = items
-    return Loaded(items, pool, discarded=len(rows) - len(items))
-
-
-def prompt_signature(evaluation: Evaluation, items: Sequence[Item], pool: Sequence[Item]) -> str:
-    """Hash dos pedidos gerados para um item de referência com um exemplo few-shot.
-
-    Muda sempre que o texto dos prompts muda, por qualquer motivo.
-    """
-    probe = items[0]
-    shot = next((p for p in pool if p.id != probe.id), probe)
-    payload = json.dumps([asdict(r) for r in evaluation.build(probe, [shot])], ensure_ascii=False)
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 def collect_results(out: Path) -> list[dict]:

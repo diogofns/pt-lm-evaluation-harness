@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pt_lm_eval import BENCHMARKS, Benchmark, HFDataset, columns
 
 BENCHMARKS.register(
@@ -10,5 +12,6 @@ BENCHMARKS.register(
         ),
         to_item=columns(id="id", question="question", options="choices.text", answer="answerKey"),
         evaluations=("mcf", "cf", "gen"),
+        card=Path(__file__).with_name("README.md"),
     ),
 )

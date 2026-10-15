@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --python 3.12 && uv pip install -e ".[dev]"
+      - run: .venv/bin/ruff format --check src tests
+      - run: .venv/bin/ruff check src tests
+      - run: .venv/bin/pytest
+
+  benchmarks:
+    # Só quando benchmarks ou a trava mudam: baixa os datasets e valida tudo.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: mudou
+        with:
+          filters: |
+            benchmarks:
+              - 'src/pt_lm_eval/benchmarks/**'
+              - 'src/pt_lm_eval/evaluations/**'
+              - 'benchmarks.lock.json'
+      - uses: astral-sh/setup-uv@v5
+        if: steps.mudou.outputs.benchmarks == 'true'
+      - name: Validar benchmarks (dados, prompts, cartão, versão)
+        if: steps.mudou.outputs.benchmarks == 'true'
+        run: |
+          uv venv --python 3.12 && uv pip install -e ".[dev]"
+          .venv/bin/pt-lm-eval benchmarks check --all
+      - name: Publicar prompts para revisão
+        if: steps.mudou.outputs.benchmarks == 'true'
+        run: |
+          echo '## Prompts renderizados (2 itens por benchmark)' >> "$GITHUB_STEP_SUMMARY"
+          for b in $(.venv/bin/pt-lm-eval benchmarks list | awk '{print $1}'); do
+            echo "### $b" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            .venv/bin/pt-lm-eval benchmarks preview "$b" -n 2 --num-fewshot 1 >> "$GITHUB_STEP_SUMMARY" 2>/dev/null
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done

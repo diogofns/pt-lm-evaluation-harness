@@ -65,6 +65,13 @@ def test_gen_prompt_and_score():
         ("\\boxed{A}", "A"),
         ("B", "B"),
         ("C) 42", "C"),
+        # Respostas reais (Llama-3.2-1B, Qwen3-4B, Qwen2.5-0.5B) fora do formato pedido:
+        ("Resposta: D.", "D"),
+        ("**Resposta: A**.", "A"),
+        ("A alternativa correta é: C. Furthermore.", "C"),
+        ("A alternativa B é 5,0%, que é a resposta correta. ⏎ Portanto, a resposta correta é B.", "B"),
+        ("Receita líquida: $195.000\n\nA resposta correta é: C.", "C"),
+        ("A. A parcela do encargo referente às instalações da distribuidora.", "A"),
         ("Resposta: Brasília", None),  # palavra que começa com letra maiúscula não é alternativa
         ("Não sei responder.", None),
         ("Resposta: F", None),  # fora das alternativas do item
