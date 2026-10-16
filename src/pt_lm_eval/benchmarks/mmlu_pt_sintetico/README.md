@@ -40,3 +40,8 @@ Organização `cemig-ceia` no Hugging Face. **Contato a definir.**
 - **Gabarito desbalanceado**: B 39,3%, C 35,4%, A 16,2%, D 9,1%. Chutar sempre "B"
   acerta 39,3%, bem acima dos 25% esperados. Compare resultados com essa referência,
   não com 25%. Recomenda-se rebalancear (embaralhar as alternativas) numa versão 2.0.
+
+## Versões
+
+- 1.1: gabarito lido sempre como letra (`answer_is="letter"`). Na 1.0, 1 item em que a letra do
+  gabarito coincidia com o texto de outra alternativa ficou com o gabarito errado.

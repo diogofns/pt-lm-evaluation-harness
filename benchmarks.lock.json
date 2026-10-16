@@ -1,10 +1,34 @@
 {
+  "belebele_pt@1.0": {
+    "source": "hf:facebook/belebele/por_Latn:test@7899cdfa4e1e0d733fd77c848e2c273cb1d32be2",
+    "prompts": {
+      "mcf": "587a8ce16e7c8551",
+      "cf": "eb4e83b2633b9d2a",
+      "gen": "7c9c430d5fcc4403"
+    }
+  },
+  "enem@1.0": {
+    "source": "hf:maritaca-ai/enem/2022+2023+2024:train@b2a7257356b0f56b740d57f23f8a575542ff6c0c",
+    "prompts": {
+      "mcf": "8d695dbc5f2db417",
+      "cf": "0e5f7a0b8ed32b4e",
+      "gen": "dc29ee5601ac5e19"
+    }
+  },
   "energy_regulacao@1.0": {
     "source": "hf:cemig-ceia/energy-eval:train@cac76ae9456fc3c9354d761880bc3c3a5b54d1e1",
     "prompts": {
       "mcf": "e925643a7e2eac5e",
       "cf": "6c4f652523b5b196",
       "gen": "585a8b1ec8e2256a"
+    }
+  },
+  "global_mmlu_pt@1.0": {
+    "source": "hf:CohereLabs/Global-MMLU/pt:test@0e619dbeb34206cd48705a1a0ea7fb21cae09993",
+    "prompts": {
+      "mcf": "20b618997e5a2c91",
+      "cf": "eb8cc3f6884ce5f7",
+      "gen": "0b156e0b4e918477"
     }
   },
   "ifeval_pt@1.0": {
@@ -29,7 +53,7 @@
       "gen": "4475e119fe9cc21f"
     }
   },
-  "mmlu_pt_sintetico@1.0": {
+  "mmlu_pt_sintetico@1.1": {
     "source": "hf:cemig-ceia/benchmark_Qwen3-235B-A22B_MMLU_v2:train@831ba6bbae5b6057fbc3cae40e13eae7b55ebb26",
     "prompts": {
       "mcf": "76618da3573f6228",
@@ -53,12 +77,20 @@
       "gen": "8e9e326b18df8ec3"
     }
   },
-  "mmmlu_pt_br@1.0": {
+  "mmmlu_pt_br@1.1": {
     "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
     "prompts": {
       "mcf": "ee738cad64632e3f",
       "cf": "d72773df35c7ccd3",
       "gen": "53ca5083b52ebc50"
+    }
+  },
+  "oab_exams@1.0": {
+    "source": "hf:eduagarcia/oab_exams:train@fe810531d30e7799dd83c2e5be302ca2f2bdf930",
+    "prompts": {
+      "mcf": "f3692acae6bc920c",
+      "cf": "de64ac58b5889c39",
+      "gen": "efadc820fd9d28dd"
     }
   }
 }

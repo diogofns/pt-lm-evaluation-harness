@@ -10,12 +10,13 @@ from pathlib import Path
 from pt_lm_eval import BENCHMARKS, Benchmark, HFDataset, MCQItem, columns, letter_index  # noqa: F401
 
 # Forma 1: colunas comuns. `options` pode ser um caminho para uma lista
-# ("choices.text") ou uma lista de colunas (["A", "B", "C", "D"]). `answer`
-# aceita letra, índice 0-based ou o texto da opção correta.
+# ("choices.text") ou uma lista de colunas (["A", "B", "C", "D"]). `answer_is` diz
+# como ler o gabarito: "letter", "index" (0-based) ou "text" (o texto da opção correta).
 to_item = columns(
     question="question",
     options="choices.text",
     answer="answer",
+    answer_is="letter",
     subject="subject",  # opcional: gera resultados por matéria
 )
 

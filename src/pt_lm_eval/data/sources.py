@@ -11,31 +11,43 @@ from typing import Any
 
 @dataclass(frozen=True)
 class HFDataset:
-    """Dataset do Hugging Face Hub. `split="*"` carrega todos os splits."""
+    """Dataset do Hugging Face Hub. `split="*"` carrega todos os splits.
+
+    `subset` pode ser uma tupla (ex.: um config por ano): as linhas de todos são
+    juntadas e cada uma recebe `_subset`.
+    """
 
     repo: str
     split: str = "test"
-    subset: str | None = None
+    subset: str | tuple[str, ...] | None = None
     revision: str | None = None  # fixe um commit para resultados reproduzíveis
 
-    def splits(self) -> list[str]:
+    @property
+    def subsets(self) -> tuple[str | None, ...]:
+        return self.subset if isinstance(self.subset, tuple) else (self.subset,)
+
+    def splits(self, subset: str | None = None) -> list[str]:
         if self.split != "*":
             return [self.split]
         from datasets import get_dataset_split_names
 
-        return get_dataset_split_names(self.repo, self.subset, revision=self.revision)
+        return get_dataset_split_names(self.repo, subset, revision=self.revision)
 
     def load(self) -> list[dict[str, Any]]:
         from datasets import load_dataset
 
         rows: list[dict[str, Any]] = []
-        for split in self.splits():
-            ds = load_dataset(self.repo, self.subset, split=split, revision=self.revision)
-            rows.extend({**row, "_split": split, "_index": i} for i, row in enumerate(ds))
+        for subset in self.subsets:
+            for split in self.splits(subset):
+                ds = load_dataset(self.repo, subset, split=split, revision=self.revision)
+                rows.extend(
+                    {**row, "_subset": subset, "_split": split, "_index": i} for i, row in enumerate(ds)
+                )
         return rows
 
     def describe(self) -> str:
-        name = f"{self.repo}/{self.subset}" if self.subset else self.repo
+        subsets = "+".join(s for s in self.subsets if s)
+        name = f"{self.repo}/{subsets}" if subsets else self.repo
         return f"hf:{name}:{self.split}@{_resolve_revision(self.repo, self.revision)}"
 
 

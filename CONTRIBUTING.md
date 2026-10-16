@@ -47,8 +47,9 @@ Há dois caminhos. O código é o mesmo; muda onde ele mora.
    `_split` (nome do split) e `_index` (posição no split).
    - **Colunas comuns**: `columns(question=..., options=..., answer=..., subject=...)`.
      `options` é um caminho para uma lista (`"choices.text"`) ou uma lista de colunas
-     (`["A", "B", "C", "D"]`); `answer` aceita letra, índice 0-based ou o texto da
-     opção. Sem `id=`, o ID é `"<split>-<índice>"`. `subject` nulo ou vazio vira "sem
+     (`["A", "B", "C", "D"]`); declare com `answer_is` como ler o gabarito: `"letter"`,
+     `"index"` (0-based) ou `"text"` (o texto da opção). Em `"auto"`, um gabarito que vale
+     como letra e como texto de outra opção (ex.: "B" com opções "A", "~A", "B", "~B") é erro. Sem `id=`, o ID é `"<split>-<índice>"`. `subject` nulo ou vazio vira "sem
      matéria".
    - **Formato fora do padrão ou linhas a filtrar**: uma função
      `to_item(row) -> MCQItem | None`. Devolva `None` para descartar a linha (ex.:

@@ -40,3 +40,8 @@ OpenAI (dataset original). Neste repositório: equipe do pt-lm-eval.
 
 - É o mesmo conjunto da tarefa `mmmlu_pt_br` do lm-evaluation-harness, usado no teste
   de paridade (`tests/test_parity_lm_eval.py`).
+
+## Versões
+
+- 1.1: gabarito lido sempre como letra (`answer_is="letter"`). Na 1.0, 2 itens em que a letra do
+  gabarito coincidia com o texto de outra alternativa ficaram com o gabarito errado.

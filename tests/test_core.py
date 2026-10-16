@@ -128,11 +128,11 @@ def test_mean_stderr_matches_formula():
     assert mean == 0.75 and se == pytest.approx(math.sqrt((1 / 3) * (1 / 2 + 1)) / 2)
 
 
-def test_aggregate_uses_macro_average_across_subjects():
+def test_aggregate_headline_is_the_item_average_like_lm_eval():
     records = [{"subject": "a", "metrics": {"acc": 1.0}}] * 3 + [{"subject": "b", "metrics": {"acc": 0.0}}]
     agg = aggregate(records)
-    assert agg["metrics"]["acc"] == 0.5  # média das matérias
-    assert agg["metrics_micro"]["acc"] == 0.75  # média dos itens
+    assert agg["metrics"]["acc"] == 0.75  # média dos itens (weight_by_size do lm-eval)
+    assert agg["metrics_macro"]["acc"] == 0.5  # média das matérias
     assert agg["by_subject"]["a"]["n"] == 3
 
 
@@ -506,3 +506,19 @@ def test_evaluations_follow_the_model_type():
     ]
     assert plan["i"] == ["energy_regulacao/gen", "ifeval_pt/ifeval", "mmmlu_pt_br/gen"]
     assert plan["a"] == plan["i"]
+
+
+def test_answer_letter_is_never_mistaken_for_option_text():
+    """MMLU formal_logic: opções "A", "~A", "B", "~B" com gabarito "B" (a segunda)."""
+    from pt_lm_eval.data.columns import answer_index
+
+    options = ["A", "~A", "B", "~B"]
+    assert answer_index("B", options, "letter") == 1
+    assert answer_index("~B", options, "text") == 3
+    assert answer_index(2, options, "index") == 2
+    with pytest.raises(ValueError, match="ambíguo"):
+        answer_index("B", options)  # auto: letra e texto discordam
+    assert answer_index("D", options) == 3  # auto sem conflito segue funcionando
+    row = {"_split": "test", "_index": 0, "q": "?", "a": "A", "b": "~A", "c": "B", "d": "~B", "gold": "B"}
+    to_item = columns(question="q", options=["a", "b", "c", "d"], answer="gold", answer_is="letter")
+    assert to_item(row).gold == 1

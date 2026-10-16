@@ -62,6 +62,12 @@ referência nos testes de paridade.
       (0 diferenças em 64.376 vereditos); a ponte `lm_eval:` deixa de ser necessária para o IFEval
 - [x] Normalização de CF fixada por benchmark (`cf_normalization`, padrão `char`): `acc_norm`
       usa a mesma para todos os modelos (antes, `acc_norm_max` escolhia por modelo)
+- [x] Média principal sobre itens (micro), como o `weight_by_size` do lm-eval; a média entre
+      matérias fica em `metrics_macro`
+- [x] Novos benchmarks de MC em PT, com paridade de itens com a referência: `enem`, `oab_exams`
+      (lighteval), `global_mmlu_pt`, `belebele_pt` (lm-eval)
+- [x] Bug corrigido: gabarito em letra lido como texto de outra alternativa (`answer_is`);
+      `mmmlu_pt_br` e `mmlu_pt_sintetico` sobem para 1.1
 - [ ] Registrar versão do vLLM / imagem nos resultados
 - [x] Execução sequencial (decisão de 2026-10-16): um modelo por vez com `gpu_memory_utilization: 0.95`,
       todos os benchmarks dele, depois o próximo; sem distribuir modelos entre GPUs

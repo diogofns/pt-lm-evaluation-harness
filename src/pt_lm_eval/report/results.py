@@ -46,10 +46,12 @@ def describe_requests(requests: list[Request]) -> dict[str, Any]:
 
 
 def aggregate(records: list[dict], cf_normalization: str = "char") -> dict[str, Any]:
-    """Média ± stderr por métrica; com várias matérias, a principal é a média entre matérias.
+    """Média ± stderr por métrica sobre os itens (micro), como o `weight_by_size` do lm-eval.
 
-    Com acc_char e acc_token (CF), `acc_norm` repete a normalização fixada pelo benchmark,
-    a mesma para todos os modelos, para que a comparação entre eles seja justa.
+    Com várias matérias, a média entre matérias (macro) fica em `metrics_macro` e cada
+    matéria em `by_subject`. Com acc_char e acc_token (CF), `acc_norm` repete a
+    normalização fixada pelo benchmark, a mesma para todos os modelos, para que a
+    comparação entre eles seja justa.
     """
     by_subject: dict[str, list[dict]] = defaultdict(list)
     for r in records:
@@ -66,7 +68,7 @@ def aggregate(records: list[dict], cf_normalization: str = "char") -> dict[str, 
     for name in _metric_names(records):
         groups = [[r["metrics"][name] for r in rs if name in r["metrics"]] for rs in by_subject.values()]
         macro[name], macro[f"{name}_stderr"] = macro_mean_stderr(groups)
-    return {"metrics": norm(macro), "metrics_micro": micro, "by_subject": subjects}
+    return {"metrics": micro, "metrics_macro": norm(macro), "by_subject": subjects}
 
 
 def _with_acc_norm(metrics: dict[str, float], cf_normalization: str) -> dict[str, float]:
