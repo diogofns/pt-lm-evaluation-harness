@@ -24,7 +24,7 @@ server:                     # vLLM gerenciado (modelos sem base_url)
   # image: vllm/vllm-openai:v0.24.0
   args:                     # flags do `vllm serve` em snake_case; cada modelo soma as suas
     max_model_len: 8192     # o --dry-run confere se os prompts cabem aqui
-    gpu_memory_utilization: 0.85
+    gpu_memory_utilization: 0.95  # uma GPU por modelo, um modelo por vez
 
 # --- Modelos --------------------------------------------------------------------------
 # type: base     → log-likelihood (mcf/cf) e geração sem chat template

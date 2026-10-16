@@ -61,7 +61,8 @@ referência nos testes de paridade.
 - [x] Normalização de CF fixada por benchmark (`cf_normalization`, padrão `char`): `acc_norm`
       usa a mesma para todos os modelos (antes, `acc_norm_max` escolhia por modelo)
 - [ ] Registrar versão do vLLM / imagem nos resultados
-- [ ] Distribuir modelos entre GPUs livres; reaproveitar o servidor entre entradas do mesmo modelo
+- [x] Execução sequencial (decisão de 2026-10-16): um modelo por vez com `gpu_memory_utilization: 0.95`,
+      todos os benchmarks dele, depois o próximo; sem distribuir modelos entre GPUs
 - [x] CI dos benchmarks também em `data/` e `core/`; teste de rede passa a exigir a trava
 - [x] Hash dos prompts ignora campos no valor padrão (a trava estava desatualizada desde `024cfe4`)
 - [x] Prompt maior que o contexto: resolvido pela configuração (`max_model_len`, `num_fewshot`,
