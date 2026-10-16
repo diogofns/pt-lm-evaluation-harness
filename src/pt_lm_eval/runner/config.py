@@ -36,6 +36,8 @@ class ModelConfig:
     generate: dict[str, Any] = field(default_factory=dict)  # max_tokens, temperature, extras
     system_prompt: str | None = None
     chat_template: bool | None = None  # None = sim para instruct e api, não para base
+    # Liga/desliga o raciocínio via chat template (enable_thinking). None = padrão do modelo.
+    thinking: bool | None = None
     concurrency: int | None = None
     timeout: float = 600.0
     max_retries: int = 3
@@ -46,10 +48,24 @@ class ModelConfig:
             raise ValueError(f"modelo {self.name}: type deve ser um de {MODEL_TYPES}")
         if self.type == "api" and not self.base_url:
             raise ValueError(f"modelo {self.name}: type api precisa de base_url")
+        if self.thinking is not None:
+            if self.type == "api":
+                raise ValueError(
+                    f"modelo {self.name}: thinking vale para modelos servidos pelo vLLM; "
+                    "em APIs, use generate.reasoning_effort"
+                )
+            if not self.uses_chat:
+                raise ValueError(f"modelo {self.name}: thinking exige chat template")
 
     @property
     def display_name(self) -> str:
-        return self.label or self.name
+        """Nome nos relatórios e nos diretórios. Com `thinking`, o modo entra no nome
+        para que o mesmo modelo com e sem raciocínio fique em linhas separadas."""
+        if self.label:
+            return self.label
+        if self.thinking is None:
+            return self.name
+        return f"{self.name}:{'thinking' if self.thinking else 'no-thinking'}"
 
     @property
     def uses_chat(self) -> bool:
@@ -62,6 +78,7 @@ class BenchmarkRun:
     evaluations: tuple[str, ...] | None = None  # None = as declaradas no benchmark
     num_fewshot: int | None = None
     fewshot_strategy: str | None = None
+    fewshot_as_multiturn: bool | None = None
     limit: int | None = None
 
 
@@ -76,6 +93,8 @@ class ExperimentConfig:
     limit: int | None = None  # itens por benchmark, sorteados com a seed
     num_fewshot: int = 0
     fewshot_strategy: str = "random"  # random | first_n
+    # Em chat, exemplos few-shot como turnos usuário/assistente em vez de uma só mensagem.
+    fewshot_as_multiturn: bool = False
     reporters: tuple[str, ...] = ("csv",)
 
     @property

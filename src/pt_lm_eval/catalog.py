@@ -97,18 +97,24 @@ def _check_one(name: str, lock: dict, update_lock: bool) -> bool:
         changed = sorted(e for e in signatures if locked["prompts"].get(e) != signatures[e])
         problems.append(f"prompts de {changed} mudaram sem mudar a versão {bench.version}: aumente a versão")
 
-    golds = Counter(getattr(it, "gold", None) for it in items)
-    n_opts = Counter(len(getattr(it, "options", ())) for it in items)
     subjects = Counter(getattr(it, "subject", None) for it in items)
     no_subject = subjects.pop(None, 0)
     status = "ok" if not problems else "FALHOU"
     print(
         f"{status} {key}: {len(items)} itens ({loaded.discarded} descartados), {len(subjects)} matérias"
-        f"{f' + {no_subject} itens sem matéria' if no_subject and subjects else ''}, "
-        f"opções {dict(sorted(n_opts.items()))}"
+        f"{f' + {no_subject} itens sem matéria' if no_subject and subjects else ''}"
     )
-    majority = max(golds.values()) / len(items)
-    print(f"   gold {dict(sorted(golds.items()))}; chutar a letra mais comum acerta {majority:.1%}")
+    if all(hasattr(it, "options") for it in items):
+        golds = Counter(it.gold for it in items)
+        n_opts = Counter(len(it.options) for it in items)
+        majority = max(golds.values()) / len(items)
+        print(f"   opções {dict(sorted(n_opts.items()))}; gold {dict(sorted(golds.items()))}")
+        print(f"   chutar a letra mais comum acerta {majority:.1%}")
+    if all(hasattr(it, "instruction_ids") for it in items):
+        per_item = Counter(len(it.instruction_ids) for it in items)
+        kinds = {i for it in items for i in it.instruction_ids}
+        total = sum(len(it.instruction_ids) for it in items)
+        print(f"   {total} instruções de {len(kinds)} tipos; por prompt {dict(sorted(per_item.items()))}")
     print(f"   fonte: {bench.source.describe()}")
     for p in problems:
         print(f"   problema: {p}")

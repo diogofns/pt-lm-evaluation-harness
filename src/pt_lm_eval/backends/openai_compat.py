@@ -203,6 +203,13 @@ class OpenAICompatFactory:
     def create(self, model: ModelConfig, base_url: str, max_length: int | None) -> OpenAICompatBackend:
         is_api = model.type == "api"
         key_env = model.api_key_env or "OPENAI_API_KEY"
+        params = dict(model.generate)
+        if model.thinking is not None:
+            # Convenção dos chat templates do Qwen3 e afins; templates sem a variável a ignoram.
+            params["chat_template_kwargs"] = {
+                **params.get("chat_template_kwargs", {}),
+                "enable_thinking": model.thinking,
+            }
         return OpenAICompatBackend(
             OpenAICompatSettings(
                 model=model.name,
@@ -217,7 +224,7 @@ class OpenAICompatFactory:
                 max_retries=model.max_retries,
                 retry_client_errors=not is_api,
                 max_tokens_field="max_completion_tokens" if is_api else "max_tokens",
-                generate_params=dict(model.generate),
+                generate_params=params,
                 system_prompt=model.system_prompt,
             )
         )

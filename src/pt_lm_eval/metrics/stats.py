@@ -18,6 +18,21 @@ def mean_stderr(values: Sequence[float]) -> tuple[float, float]:
     return mean, math.sqrt(var / n)
 
 
+def weighted_mean_stderr(values: Sequence[float], weights: Sequence[float]) -> tuple[float, float]:
+    """Média ponderada Σwx/Σw e erro-padrão de razão, com os itens como unidades.
+
+    Com pesos iguais, coincide com `mean_stderr`.
+    """
+    n, total = len(values), sum(weights)
+    if n == 0 or total == 0:
+        return math.nan, math.nan
+    mean = sum(w * v for v, w in zip(values, weights, strict=True)) / total
+    if n == 1:
+        return mean, math.nan
+    spread = sum((w * (v - mean)) ** 2 for v, w in zip(values, weights, strict=True))
+    return mean, math.sqrt(spread * n / (n - 1)) / total
+
+
 def macro_mean_stderr(groups: Sequence[Sequence[float]]) -> tuple[float, float]:
     """Média simples entre grupos (ex.: matérias) e seu erro-padrão.
 

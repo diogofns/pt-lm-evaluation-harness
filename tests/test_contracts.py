@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from pt_lm_eval import BACKENDS, BENCHMARKS, EVALUATIONS, REPORTERS, MCQItem
+from pt_lm_eval import BACKENDS, BENCHMARKS, EVALUATIONS, REPORTERS, InstructionItem, MCQItem
 from pt_lm_eval.runner.config import ModelConfig
 from pt_lm_eval.testing import check_benchmark, check_evaluation
 
 ITEM = MCQItem(id="q", question="Quanto é 2 + 2?", options=("3", "4", "5", "6"), gold=1, subject="mat")
+# Um exemplo por tipo de item; cada avaliação é testada com o tipo que declara.
+EXAMPLES = {
+    MCQItem: ITEM,
+    InstructionItem: InstructionItem(
+        id="i", prompt="Escreva sem vírgulas.", instruction_ids=("pt:punctuation:no_comma",), kwargs=({},)
+    ),
+}
 
 
 @pytest.mark.parametrize("name", EVALUATIONS.names())
 def test_evaluation_contract(name):
-    check_evaluation(name, ITEM)
+    check_evaluation(name, EXAMPLES[EVALUATIONS.get(name).item_type])
 
 
 @pytest.mark.parametrize("name", BACKENDS.names())
@@ -51,4 +60,5 @@ def test_benchmark_declares_known_evaluations_and_card(name):
 @pytest.mark.network
 @pytest.mark.parametrize("name", BENCHMARKS.names())
 def test_benchmark_contract(name):
-    check_benchmark(name)
+    # Com a trava: prompt mudou sem a versão mudar = falha (como o CI dos benchmarks).
+    check_benchmark(name, lock=Path(__file__).parents[1] / "benchmarks.lock.json")

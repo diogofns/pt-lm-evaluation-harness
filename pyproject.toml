@@ -18,7 +18,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-lm-eval = ["lm-eval[ifeval]>=0.4.9"]
+lm-eval = ["lm-eval[api,ifeval]>=0.4.9"]
+ifeval = [  # verificadores do IFEval PT
+    "langdetect>=1.0.9",
+    "nltk>=3.9",
+    "spacy>=3.8,<3.9",
+    "pt-core-news-sm @ https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.8.0/pt_core_news_sm-3.8.0-py3-none-any.whl",
+]
+gpu = ["torch>=2.4"]  # só para o teste F0 (pytest -m gpu); o vLLM fica fora do venv
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
@@ -29,6 +36,7 @@ pt-lm-eval = "pt_lm_eval.cli:main"
 [project.entry-points."pt_lm_eval.evaluations"]
 mcq_loglikelihood = "pt_lm_eval.evaluations.mcq_loglikelihood"
 mcq_generate = "pt_lm_eval.evaluations.mcq_generate"
+instruction_following = "pt_lm_eval.evaluations.instruction_following"
 
 [project.entry-points."pt_lm_eval.backends"]
 openai_compat = "pt_lm_eval.backends.openai_compat"
@@ -38,9 +46,13 @@ csv = "pt_lm_eval.report.csv_reporter"
 
 [project.entry-points."pt_lm_eval.benchmarks"]
 energy_regulacao = "pt_lm_eval.benchmarks.energy_regulacao.benchmark"
+ifeval_pt = "pt_lm_eval.benchmarks.ifeval_pt.benchmark"
 mmlu_pt = "pt_lm_eval.benchmarks.mmlu_pt.benchmark"
 mmlu_pt_sintetico = "pt_lm_eval.benchmarks.mmlu_pt_sintetico.benchmark"
 mmmlu_pt_br = "pt_lm_eval.benchmarks.mmmlu_pt_br.benchmark"
+
+[tool.hatch.metadata]
+allow-direct-references = true  # modelo do spaCy, distribuído só por URL
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pt_lm_eval"]

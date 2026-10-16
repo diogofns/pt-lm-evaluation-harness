@@ -49,7 +49,16 @@ class Benchmark:
 
 
 class Evaluation(Protocol):
-    """Como: transforma itens em pedidos e pontua as respostas."""
+    """Como: transforma itens em pedidos e pontua as respostas.
+
+    Avaliações de geração podem declarar `supports_multiturn = True` e aceitar
+    `build(item, shots, multiturn=True)`, que monta os exemplos few-shot como turnos
+    usuário/assistente (`GenerateRequest.messages`). Sem isso, `fewshot_as_multiturn`
+    é recusado no plano.
+
+    `scoring_version` (opcional) entra na identidade das amostras: ao mudar a
+    pontuação, aumente-o para que amostras antigas sejam refeitas, não misturadas.
+    """
 
     name: str
     item_type: type[Item]

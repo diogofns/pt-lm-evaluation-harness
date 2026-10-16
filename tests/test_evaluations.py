@@ -6,7 +6,7 @@ import pytest
 
 from pt_lm_eval import EVALUATIONS, MCQItem
 from pt_lm_eval.core.types import GenerateResponse, LoglikelihoodResponse
-from pt_lm_eval.metrics.extraction import extract_letter, split_reasoning
+from pt_lm_eval.metrics.extraction import extract_letter, extract_letter_flexible, split_reasoning
 
 ITEM = MCQItem(id="q1", question="Quanto é 2 + 2?", options=("3", "4", "5"), gold=1)
 SHOT = MCQItem(id="s1", question="Quanto é 1 + 1?", options=("2", "3", "4"), gold=0)
@@ -46,39 +46,77 @@ def test_gen_prompt_and_score():
     )
     assert "Resposta: A\n\nPergunta: Quanto é 2 + 2?" in req.prompt
     ok = ev.score(ITEM, [GenerateResponse("Resposta: B", finish_reason="stop")])
-    assert ok.metrics == {"acc": 1.0, "extracted": 1.0, "truncated": 0.0}
+    assert ok.metrics == {
+        "acc": 1.0,
+        "extracted": 1.0,
+        "acc_flex": 1.0,
+        "truncated": 0.0,
+        "random_baseline": 1 / 3,
+    }
     cut = ev.score(ITEM, [GenerateResponse("Vamos pensar passo a passo", finish_reason="length")])
-    assert cut.metrics == {"acc": 0.0, "extracted": 0.0, "truncated": 1.0}
+    assert cut.metrics == {
+        "acc": 0.0,
+        "extracted": 0.0,
+        "acc_flex": 0.0,
+        "truncated": 1.0,
+        "random_baseline": 1 / 3,
+    }
+
+
+def test_gen_multiturn_puts_each_shot_in_its_own_turns():
+    ev = EVALUATIONS.get("gen")
+    (req,) = ev.build(ITEM, [SHOT], multiturn=True)
+    assert [m["role"] for m in req.messages] == ["user", "assistant", "user"]
+    assert req.messages[0]["content"].startswith("Pergunta: Quanto é 1 + 1?\nA. 2")
+    assert req.messages[1]["content"] == "Resposta: A"
+    assert req.messages[2]["content"].endswith('no formato "Resposta: X".')
+    assert req.stop == ()
+    # Sem exemplos, multi-turn não muda nada.
+    assert ev.build(ITEM, [], multiturn=True) == ev.build(ITEM, [])
+
+
+def test_loglikelihood_records_random_baseline():
+    responses = [LoglikelihoodResponse(lp, False, 1) for lp in (-3.0, -1.0, -2.0)]
+    assert EVALUATIONS.get("mcf").score(ITEM, responses).metrics == {"acc": 1.0, "random_baseline": 1 / 3}
 
 
 @pytest.mark.parametrize(
-    "text,expected",
+    "text,strict,flexible",
     [
-        ("Resposta: B", "B"),
-        ("resposta: (C)", "C"),
-        ("**Resposta: D**", "D"),
-        ("A resposta correta é a letra E.", "E"),
-        ("A alternativa correta é a C, pois…", "C"),
-        ("Analisando: a opção A está errada. Resposta final: B", "B"),
-        ("Resposta: a alternativa B", "B"),
-        ("The answer is (D)", "D"),
-        ("\\boxed{A}", "A"),
-        ("B", "B"),
-        ("C) 42", "C"),
-        # Respostas reais (Llama-3.2-1B, Qwen3-4B, Qwen2.5-0.5B) fora do formato pedido:
-        ("Resposta: D.", "D"),
-        ("**Resposta: A**.", "A"),
-        ("A alternativa correta é: C. Furthermore.", "C"),
-        ("A alternativa B é 5,0%, que é a resposta correta. ⏎ Portanto, a resposta correta é B.", "B"),
-        ("Receita líquida: $195.000\n\nA resposta correta é: C.", "C"),
-        ("A. A parcela do encargo referente às instalações da distribuidora.", "A"),
-        ("Resposta: Brasília", None),  # palavra que começa com letra maiúscula não é alternativa
-        ("Não sei responder.", None),
-        ("Resposta: F", None),  # fora das alternativas do item
+        # No formato pedido, normalizado (maiúsculas, markdown, parênteses, pontuação):
+        ("Resposta: B", "B", "B"),
+        ("resposta: (C)", "C", "C"),
+        ("Resposta: b", "B", "B"),
+        ("**Resposta: D**", "D", "D"),
+        ("**Resposta:** B", "B", "B"),
+        ("Resposta: D.", "D", "D"),
+        ("**Resposta: A**.", "A", "A"),
+        ("B", "B", "B"),  # completa o "Resposta:" do prompt
+        ("C) 42", "C", "C"),
+        ("A. A parcela do encargo referente às instalações da distribuidora.", "A", "A"),
+        # Outras letras mencionadas não contam; vale a última resposta no formato:
+        ("A alternativa correta é C, pois a alternativa B está errada.\n\nResposta: C", "C", "C"),
+        ("Resposta: C\n\nA letra B estaria certa se a norma fosse outra.", "C", "C"),
+        ("Resposta: A\n\nCorrigindo o cálculo… Resposta: C", "C", "C"),
+        # Fora do formato: só o modo flexível (acc_flex) aceita.
+        ("A resposta correta é a letra E.", None, "E"),
+        ("A alternativa correta é a C, pois…", None, "C"),
+        ("Analisando: a opção A está errada. Resposta final: B", None, "B"),
+        ("Resposta: a alternativa B", None, "B"),
+        ("The answer is (D)", None, "D"),
+        ("\\boxed{A}", None, "A"),
+        ("A alternativa correta é: C. Furthermore.", None, "C"),
+        ("A alternativa B é 5,0%, que é a resposta correta. ⏎ Portanto, a resposta correta é B.", None, "B"),
+        ("Receita líquida: $195.000\n\nA resposta correta é: C.", None, "C"),
+        # Nenhuma alternativa:
+        ("Resposta: Brasília", None, None),  # palavra que começa com maiúscula não é alternativa
+        ("Não sei responder.", None, None),
+        ("Resposta: F", None, None),  # fora das alternativas do item
     ],
 )
-def test_extract_letter(text, expected):
-    assert extract_letter(text, "ABCDE") == expected
+def test_extract_letter(text, strict, flexible):
+    assert extract_letter(text, "ABCDE") == strict
+    assert extract_letter_flexible(text, "ABCDE") == flexible
 
 
 def test_split_reasoning():

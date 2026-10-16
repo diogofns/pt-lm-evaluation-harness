@@ -136,6 +136,17 @@ def test_aggregate_uses_macro_average_across_subjects():
     assert agg["by_subject"]["a"]["n"] == 3
 
 
+def test_aggregate_acc_norm_max_takes_the_better_normalization():
+    records = [
+        {"metrics": {"acc_char": 1.0, "acc_token": 0.0}},
+        {"metrics": {"acc_char": 1.0, "acc_token": 1.0}},
+    ]
+    metrics = aggregate(records)["metrics"]
+    assert metrics["acc_norm_max"] == metrics["acc_char"] == 1.0
+    assert metrics["acc_norm_max_stderr"] == metrics["acc_char_stderr"]
+    assert "acc_norm_max" not in aggregate([{"metrics": {"acc": 1.0}}])["metrics"]
+
+
 # --- configuração -------------------------------------------------------------------
 
 
@@ -171,3 +182,267 @@ def test_stop_sequences_only_without_chat(monkeypatch):
         assert response.text == "Resposta: A"
     assert "stop" not in sent["/chat/completions"]
     assert sent["/completions"]["stop"] == ["\n\nPergunta:"]
+
+
+def test_thinking_flag_names_the_run_and_reaches_the_chat_template(monkeypatch):
+    import asyncio
+
+    from pt_lm_eval.backends.openai_compat import OpenAICompatBackend, OpenAICompatFactory
+    from pt_lm_eval.core.types import GenerateRequest
+
+    base = {"experiment": "x", "benchmarks": ["energy_regulacao"]}
+    on, off = parse_config(
+        {
+            **base,
+            "models": [
+                {"name": "Qwen/Q", "type": "instruct", "thinking": True},
+                {
+                    "name": "Qwen/Q",
+                    "type": "instruct",
+                    "thinking": False,
+                    "generate": {"chat_template_kwargs": {"x": 1}},
+                },
+            ],
+        }
+    ).models
+    assert (on.display_name, off.display_name) == ("Qwen/Q:thinking", "Qwen/Q:no-thinking")
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        parse_config(
+            {**base, "models": [{"name": "g", "type": "api", "base_url": "http://x", "thinking": True}]}
+        )
+    with pytest.raises(ValueError, match="exige chat template"):
+        parse_config({**base, "models": [{"name": "m", "type": "base", "thinking": False}]})
+
+    sent = []
+
+    async def fake_post(self, path, payload):
+        sent.append(payload)
+        return {"choices": [{"message": {"content": "Resposta: A"}, "finish_reason": "stop"}]}
+
+    monkeypatch.setattr(OpenAICompatBackend, "_post", fake_post)
+    for model in (on, off):
+        backend = OpenAICompatFactory().create(model, "http://x/v1", None)
+        asyncio.run(backend.generate([GenerateRequest(prompt="?")]))
+    assert sent[0]["chat_template_kwargs"] == {"enable_thinking": True}
+    assert sent[1]["chat_template_kwargs"] == {"x": 1, "enable_thinking": False}
+
+
+def test_fewshot_as_multiturn_applies_only_to_chat_generation_with_shots():
+    from pt_lm_eval.runner.plan import build_plan
+
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "fewshot_as_multiturn": True,
+            "num_fewshot": 2,
+            "models": [{"name": "i", "type": "instruct"}, {"name": "b", "type": "base"}],
+            "benchmarks": [
+                "energy_regulacao",
+                {"name": "mmmlu_pt_br", "evaluations": ["gen"], "num_fewshot": 0},
+            ],
+        }
+    )
+    multiturn = {(s.model.name, s.benchmark, s.evaluation) for s in build_plan(cfg) if s.fewshot_as_multiturn}
+    assert multiturn == {("i", "energy_regulacao", "gen")}
+
+
+def test_fingerprint_ignores_fields_left_at_default():
+    from pt_lm_eval.runner.execute import _non_default
+
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "models": [{"name": "m", "type": "base", "generate": {}}],
+            "benchmarks": ["energy_regulacao"],
+        }
+    )
+    assert _non_default(cfg.models[0]) == {"name": "m", "type": "base"}
+
+
+# --- teste de sanidade e servidor ------------------------------------------------------
+
+
+class _FakeBackend:
+    def __init__(self, logprob=-1.5, text="ok", error=None):
+        self.logprob, self.text, self.error = logprob, text, error
+
+    async def loglikelihood(self, requests):
+        from pt_lm_eval.core.types import LoglikelihoodResponse
+
+        return [LoglikelihoodResponse(self.logprob, True, 2) for _ in requests]
+
+    async def generate(self, requests):
+        from pt_lm_eval.core.types import GenerateResponse
+
+        return [GenerateResponse(self.text, error=self.error) for _ in requests]
+
+
+def test_smoke_test_checks_each_request_kind_used():
+    import asyncio
+
+    from pt_lm_eval.runner.smoke import SmokeTestError, smoke_test
+
+    asyncio.run(smoke_test(_FakeBackend(), {"loglikelihood", "generate"}))
+    with pytest.raises(SmokeTestError, match="geração falhou"):
+        asyncio.run(smoke_test(_FakeBackend(text="", error="HTTP 404"), {"generate"}))
+    with pytest.raises(SmokeTestError, match="geração vazia"):
+        asyncio.run(smoke_test(_FakeBackend(text=""), {"generate"}))
+    with pytest.raises(SmokeTestError, match="log-likelihood inválido"):
+        asyncio.run(smoke_test(_FakeBackend(logprob=float("nan")), {"loglikelihood"}))
+    asyncio.run(smoke_test(_FakeBackend(text="", error="x"), {"loglikelihood"}))  # só testa o que usa
+
+
+def test_vllm_server_refuses_a_busy_port(tmp_path):
+    import socket
+
+    from pt_lm_eval.servers.vllm import ServerError, vllm_server
+
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        port = busy.getsockname()[1]
+        with pytest.raises(ServerError, match="já está em uso"):
+            with vllm_server("m", args={}, log_path=tmp_path / "x.log", port=port, executable="false"):
+                pass
+
+
+def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
+    from contextlib import contextmanager
+
+    from pt_lm_eval.runner import execute
+    from pt_lm_eval.servers.vllm import ServerError
+
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "output_dir": str(tmp_path),
+            "models": [{"name": "quebrado", "type": "base"}, {"name": "ok", "type": "base"}],
+            "benchmarks": [{"name": "energy_regulacao", "evaluations": ["mcf"]}],
+            "reporters": [],
+        }
+    )
+    ran = []
+
+    @contextmanager
+    def fake_endpoint(model, server, log_dir):
+        if model.name == "quebrado":
+            raise ServerError("vLLM terminou antes de ficar pronto")
+        yield "http://x/v1"
+
+    async def fake_run_model(steps, backend, cfg):
+        ran.append(steps[0].model.name)
+
+    monkeypatch.setattr(execute, "model_endpoint", fake_endpoint)
+    monkeypatch.setattr(execute, "_run_model", fake_run_model)
+    with pytest.raises(RuntimeError, match=r"modelos pulados: \['quebrado'\]"):
+        execute.run_experiment(cfg)
+    assert ran == ["ok"]
+
+
+# --- checagem de contexto do dry-run ------------------------------------------------
+
+
+class _WordTokenizer:
+    """Um token por palavra; o chat template acrescenta 3 palavras."""
+
+    bos_token_id = None
+    eos_token_id = 0
+
+    class _Encoding(dict):  # como o BatchEncoding: aceita enc["input_ids"] e enc.input_ids
+        __getattr__ = dict.__getitem__
+
+    def __call__(self, texts, add_special_tokens=True):
+        ids = [list(range(len(t.split()))) for t in ([texts] if isinstance(texts, str) else texts)]
+        return self._Encoding(input_ids=ids[0] if isinstance(texts, str) else ids)
+
+    def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=False, **kwargs):
+        return "<i> " + " ".join(m["content"] for m in messages) + " <a> <g>"
+
+
+class _MemorySource:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def load(self):
+        return [{**r, "_split": "test", "_index": i} for i, r in enumerate(self.rows)]
+
+    def describe(self):
+        return "memória"
+
+
+def _memory_benchmark() -> str:
+    """Benchmark em memória, com uma pergunta curta e uma longa (registrado uma vez)."""
+    from pt_lm_eval import Benchmark, columns
+
+    if "_contexto_teste" not in BENCHMARKS.names():
+        rows = [
+            {"q": "curta?", "o": ["a", "b"], "a": 0},
+            {"q": " ".join(["longa"] * 40) + "?", "o": ["a", "b"], "a": 1},
+        ]
+        BENCHMARKS.register(
+            "_contexto_teste",
+            Benchmark(
+                version="1",
+                source=_MemorySource(rows),
+                to_item=columns(question="q", options="o", answer="a"),
+                evaluations=("mcf", "gen"),
+            ),
+        )
+    return "_contexto_teste"
+
+
+def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
+    from pt_lm_eval.runner import lengths
+    from pt_lm_eval.runner.plan import build_plan
+
+    _memory_benchmark()
+    monkeypatch.setattr(lengths, "_tokenizer", lambda name: _WordTokenizer())
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "server": {"args": {"max_model_len": 60}},
+            "benchmarks": ["_contexto_teste"],
+            "models": [
+                {"name": "i", "type": "instruct", "generate": {"max_tokens": 30}},
+                {"name": "g", "type": "api", "base_url": "http://x"},
+            ],
+        }
+    )
+    checks = {(c.step.model.name, c.step.evaluation): c for c in lengths.check_lengths(build_plan(cfg), cfg)}
+    gen = checks[("i", "gen")]
+    assert (gen.n_items, gen.over, gen.limit) == (2, 1, 60) and not gen.ok  # só a pergunta longa estoura
+    assert checks[("i", "mcf")].over == 0 and checks[("i", "mcf")].ok
+    assert checks[("g", "gen")].note == "API: sem tokenizer local" and checks[("g", "gen")].ok
+    assert "1 itens não cabem" in lengths.format_lengths(list(checks.values()))
+
+
+def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+
+    from pt_lm_eval.report.csv_reporter import CSVReporter
+    from pt_lm_eval.runner import execute
+    from pt_lm_eval.runner.plan import build_plan
+
+    _memory_benchmark()
+    cfg = parse_config(
+        {
+            "experiment": "t",
+            "output_dir": str(tmp_path),
+            "benchmarks": [{"name": "_contexto_teste", "evaluations": ["gen"]}],
+            "models": [{"name": "m", "type": "instruct"}],
+        }
+    )
+    (step,) = build_plan(cfg)
+    clock = iter([100.0, 104.0, 200.0, 201.5])
+    # Só a referência de execute: o event loop do asyncio também usa time.monotonic.
+    monkeypatch.setattr(execute, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    result = asyncio.run(execute.run_step(step, _FakeBackend(text="Resposta: A"), cfg))
+    assert result["timing"] == {"seconds": 4.0, "items_run": 2, "items_resumed": 0}
+    # Retomada com a mesma configuração e nada a fazer: soma o tempo anterior.
+    result = asyncio.run(execute.run_step(step, _FakeBackend(text="Resposta: A"), cfg))
+    assert result["timing"] == {"seconds": 5.5, "items_run": 0, "items_resumed": 2}
+    path = CSVReporter().write(execute.collect_results(cfg.out_dir), cfg.out_dir, "t")
+    assert "_contexto_teste@1|gen|duration_seconds" in path.read_text().splitlines()[0]
+    assert json.loads(next(cfg.out_dir.glob("*/*.results.json")).read_text())["evaluation"]["fingerprint"]

@@ -8,6 +8,7 @@ seed: 1234
 limit: 100              # itens por benchmark, sorteados com a seed (omita para usar todos)
 num_fewshot: 0          # padrão; cada benchmark pode sobrescrever
 fewshot_strategy: random  # random | first_n
+fewshot_as_multiturn: false  # em chat: exemplos como turnos usuário/assistente; cada benchmark pode sobrescrever
 
 server:
   kind: vllm
@@ -32,6 +33,17 @@ models:
   - name: Qwen/Qwen3-4B-Instruct-2507
     type: instruct                                     # log-likelihood + geração com chat template
     generate: {max_tokens: 1024}
+
+  # O mesmo modelo com e sem raciocínio: cada um vira uma linha no relatório
+  # (Qwen/Qwen3-30B-A3B:thinking e Qwen/Qwen3-30B-A3B:no-thinking).
+  # - name: Qwen/Qwen3-30B-A3B
+  #   type: instruct
+  #   thinking: true                                   # chat_template_kwargs.enable_thinking
+  #   server_args: {reasoning_parser: qwen3}
+  #   generate: {max_tokens: 16384}
+  # - name: Qwen/Qwen3-30B-A3B
+  #   type: instruct
+  #   thinking: false
 
   # - name: gpt-5.4-mini
   #   type: api                                        # só geração; mcf/cf aparecem como "pulado"

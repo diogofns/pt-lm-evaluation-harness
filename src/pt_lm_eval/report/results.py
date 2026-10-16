@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..core.types import Request
-from ..metrics.stats import macro_mean_stderr, mean_stderr
+from ..metrics.stats import macro_mean_stderr, mean_stderr, weighted_mean_stderr
 
 if TYPE_CHECKING:
     from ..core.protocols import Benchmark
@@ -39,6 +39,9 @@ def describe_requests(requests: list[Request]) -> dict[str, Any]:
     continuations = [r.continuation for r in requests if hasattr(r, "continuation")]
     if continuations:
         out["continuations"] = continuations
+    messages = [list(r.messages) for r in requests if getattr(r, "messages", None)]
+    if messages:
+        out["messages"] = messages
     return out
 
 
@@ -47,15 +50,26 @@ def aggregate(records: list[dict]) -> dict[str, Any]:
     by_subject: dict[str, list[dict]] = defaultdict(list)
     for r in records:
         by_subject[r.get("subject") or "(sem matéria)"].append(r)
-    micro = _mean_metrics(records)
+    micro = _with_norm_max(_mean_metrics(records))
     if len(by_subject) == 1:
         return {"metrics": micro}
-    subjects = {s: {"n": len(rs), **_mean_metrics(rs)} for s, rs in sorted(by_subject.items())}
+    subjects = {
+        s: {"n": len(rs), **_with_norm_max(_mean_metrics(rs))} for s, rs in sorted(by_subject.items())
+    }
     macro = {}
     for name in _metric_names(records):
         groups = [[r["metrics"][name] for r in rs if name in r["metrics"]] for rs in by_subject.values()]
         macro[name], macro[f"{name}_stderr"] = macro_mean_stderr(groups)
-    return {"metrics": macro, "metrics_micro": micro, "by_subject": subjects}
+    return {"metrics": _with_norm_max(macro), "metrics_micro": micro, "by_subject": subjects}
+
+
+def _with_norm_max(metrics: dict[str, float]) -> dict[str, float]:
+    """acc_norm_max = o maior entre acc_char e acc_token, a métrica de CF mais confiável
+    segundo o guia do OpenEvals (a melhor normalização varia com a língua e o tokenizer)."""
+    if "acc_char" not in metrics or "acc_token" not in metrics:
+        return metrics
+    best = max(("acc_char", "acc_token"), key=lambda m: metrics[m])
+    return {**metrics, "acc_norm_max": metrics[best], "acc_norm_max_stderr": metrics[f"{best}_stderr"]}
 
 
 def build_result(
@@ -68,6 +82,8 @@ def build_result(
     prompt_sha: str,
     records: list[dict],
     samples_path: str,
+    fingerprint: str | None = None,
+    timing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     model = step.model
     return {
@@ -88,11 +104,15 @@ def build_result(
             "prompt_sha": prompt_sha,
             "num_fewshot": step.num_fewshot,
             "fewshot_strategy": step.fewshot_strategy,
+            "fewshot_as_multiturn": step.fewshot_as_multiturn,
             "seed": cfg.seed,
             "limit": step.limit,
+            "fingerprint": fingerprint,
         },
+        "timing": timing,
         "model": {
             **{k: v for k, v in asdict(model).items() if v not in (None, {}, "")},
+            "display_name": model.display_name,
             "server": None
             if model.base_url
             else {**asdict(cfg.server), "args": {**cfg.server.args, **model.server_args}},
@@ -109,7 +129,13 @@ def write_result(result: dict[str, Any], path: Path) -> None:
 def _mean_metrics(records: list[dict]) -> dict[str, float]:
     out: dict[str, float] = {}
     for name in _metric_names(records):
-        mean, stderr = mean_stderr([r["metrics"][name] for r in records if name in r["metrics"]])
+        rs = [r for r in records if name in r["metrics"]]
+        values = [r["metrics"][name] for r in rs]
+        if any(name in r.get("weights", {}) for r in rs):
+            weights = [r.get("weights", {}).get(name, 1.0) for r in rs]
+            mean, stderr = weighted_mean_stderr(values, weights)
+        else:
+            mean, stderr = mean_stderr(values)
         out[name], out[f"{name}_stderr"] = mean, stderr
     return out
 

@@ -30,13 +30,15 @@ jobs:
             benchmarks:
               - 'src/pt_lm_eval/benchmarks/**'
               - 'src/pt_lm_eval/evaluations/**'
+              - 'src/pt_lm_eval/core/**'
+              - 'src/pt_lm_eval/data/**'
               - 'benchmarks.lock.json'
       - uses: astral-sh/setup-uv@v5
         if: steps.mudou.outputs.benchmarks == 'true'
       - name: Validar benchmarks (dados, prompts, cartão, versão)
         if: steps.mudou.outputs.benchmarks == 'true'
         run: |
-          uv venv --python 3.12 && uv pip install -e ".[dev]"
+          uv venv --python 3.12 && uv pip install -e ".[dev,ifeval]"
           .venv/bin/pt-lm-eval benchmarks check --all
       - name: Publicar prompts para revisão
         if: steps.mudou.outputs.benchmarks == 'true'

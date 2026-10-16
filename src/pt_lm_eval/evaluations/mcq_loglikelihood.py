@@ -3,6 +3,9 @@
 - mcf:    opções no prompt; pontua " A", " B", … após "Resposta:".
 - cf:     opções fora do prompt; pontua " <texto da opção>".
 - cf_pmi: cf + acc_pmi, que custa o dobro de pedidos.
+
+Todas registram random_baseline (1/nº de opções); com acc_char e acc_token, o
+resultado agregado ganha acc_norm_max (ver report/results.py).
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ class MCQLoglikelihood:
         texts = [c.strip() for c in self._choices(item)]
         metrics = choice_accuracy(conditional, item.gold, texts, unconditional)
         return Scored(
-            metrics={m: metrics[m] for m in self.metrics},
+            metrics={**{m: metrics[m] for m in self.metrics}, "random_baseline": 1 / n},
             details={
                 "gold": item.letters[item.gold],
                 "pred": item.letters[argmax([r.logprob for r in conditional])],

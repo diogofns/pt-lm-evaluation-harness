@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import signal
+import socket
 import subprocess
 import time
 import urllib.error
@@ -17,6 +19,10 @@ from typing import Any
 HOST = "127.0.0.1"
 log = logging.getLogger("pt_lm_eval")
 _DOCKER_ENV = ("CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "HF_TOKEN", "HF_HUB_CACHE")
+
+
+class ServerError(RuntimeError):
+    """O servidor do modelo não subiu (porta ocupada, falha na inicialização, tempo esgotado)."""
 
 
 def serve_args(model: str, port: int, args: dict[str, Any]) -> list[str]:
@@ -49,6 +55,8 @@ def vllm_server(
 ) -> Iterator[str]:
     """Context manager que devolve a base URL (`http://127.0.0.1:<port>/v1`)."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    if _port_in_use(port):  # senão o /health de outro serviço passaria pelo nosso
+        raise ServerError(f"a porta {port} já está em uso; escolha outra em server.port")
     cmd = serve_args(model, port, args)
     with open(log_path, "wb") as log:
         if mode == "local":
@@ -69,6 +77,7 @@ def vllm_server(
             raise ValueError(f"server.mode deve ser local ou docker, não {mode!r}")
         try:
             _wait_ready(port, alive, log_path, startup_timeout)
+            _check_served_model(port, model)
             yield f"http://{HOST}:{port}/v1"
         finally:
             _stop(handle, mode)
@@ -106,7 +115,7 @@ def _wait_ready(port: int, alive: Any, log_path: Path, timeout: int) -> None:
     next_report = start + 60
     while time.monotonic() < start + timeout:
         if not alive():
-            raise RuntimeError(f"vLLM terminou antes de ficar pronto.\n--- fim do log ---\n{_tail(log_path)}")
+            raise ServerError(f"vLLM terminou antes de ficar pronto.\n--- fim do log ---\n{_tail(log_path)}")
         try:
             with urllib.request.urlopen(f"http://{HOST}:{port}/health", timeout=5):
                 log.info("vLLM pronto em %ds", time.monotonic() - start)
@@ -116,7 +125,20 @@ def _wait_ready(port: int, alive: Any, log_path: Path, timeout: int) -> None:
         if time.monotonic() >= next_report:  # download de pesos não aparece no log do vLLM
             log.info("aguardando vLLM há %ds (log: %s)", time.monotonic() - start, log_path)
             next_report += 60
-    raise TimeoutError(f"vLLM não ficou pronto em {timeout}s.\n--- fim do log ---\n{_tail(log_path)}")
+    raise ServerError(f"vLLM não ficou pronto em {timeout}s.\n--- fim do log ---\n{_tail(log_path)}")
+
+
+def _port_in_use(port: int) -> bool:
+    with socket.socket() as sock:
+        sock.settimeout(1)
+        return sock.connect_ex((HOST, port)) == 0
+
+
+def _check_served_model(port: int, model: str) -> None:
+    with urllib.request.urlopen(f"http://{HOST}:{port}/v1/models", timeout=10) as response:
+        served = [m["id"] for m in json.load(response).get("data", [])]
+    if model not in served:
+        raise ServerError(f"o servidor na porta {port} serve {served}, não {model}")
 
 
 def _stop(handle: Any, mode: str, grace: int = 30) -> None:

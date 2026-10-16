@@ -22,6 +22,8 @@ class Step:
     fewshot_strategy: str
     limit: int | None
     skip_reason: str | None = None
+    # Efetivo: só vale com chat, geração e ao menos um exemplo (ou o padrão de uma tarefa lm_eval).
+    fewshot_as_multiturn: bool = False
 
 
 def build_plan(cfg: ExperimentConfig) -> list[Step]:
@@ -35,6 +37,7 @@ def build_plan(cfg: ExperimentConfig) -> list[Step]:
                     shots = run.num_fewshot
                 else:
                     shots = cfg.num_fewshot if run.num_fewshot is None else run.num_fewshot
+                multiturn = _multiturn(cfg, run, model, evaluation, shots)
                 steps.append(
                     Step(
                         model=model,
@@ -44,9 +47,23 @@ def build_plan(cfg: ExperimentConfig) -> list[Step]:
                         fewshot_strategy=run.fewshot_strategy or cfg.fewshot_strategy,
                         limit=run.limit if run.limit is not None else cfg.limit,
                         skip_reason=f"backend sem {', '.join(sorted(missing))}" if missing else None,
+                        fewshot_as_multiturn=multiturn,
                     )
                 )
     return steps
+
+
+def _multiturn(
+    cfg: ExperimentConfig, run: BenchmarkRun, model: ModelConfig, evaluation: str, shots: int | None
+) -> bool:
+    wanted = cfg.fewshot_as_multiturn if run.fewshot_as_multiturn is None else run.fewshot_as_multiturn
+    if not (wanted and model.uses_chat and needs(run.name, evaluation) == {"generate"}):
+        return False
+    if is_lm_eval(run.name):
+        return shots != 0
+    if not getattr(EVALUATIONS.get(evaluation), "supports_multiturn", False):
+        raise ValueError(f"{run.name}: a avaliação {evaluation} não suporta fewshot_as_multiturn")
+    return bool(shots)
 
 
 def needs(benchmark: str, evaluation: str) -> frozenset[str]:
@@ -73,6 +90,8 @@ def format_plan(steps: list[Step]) -> str:
         else:
             kind = "/".join(sorted(needs(s.benchmark, s.evaluation)))
             chat = " (chat)" if s.model.uses_chat and kind == "generate" else ""
+            if s.fewshot_as_multiturn:
+                chat = " (chat, multi-turn)"
             status = f"{kind}{chat}"
         rows.append(
             (

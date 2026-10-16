@@ -1,5 +1,8 @@
 """Relatório CSV: uma linha por modelo, uma coluna por benchmark@versão|avaliação|métrica.
 
+Além das métricas, `duration_seconds` traz o tempo de cada avaliação (pedidos e pontuação,
+sem a subida do servidor), somado entre retomadas da mesma configuração.
+
 É reconstruído a partir de todos os `*.results.json` do experimento, então
 rodar de novo um modelo atualiza a linha dele sem afetar as outras. Versões
 diferentes de um benchmark ficam em colunas diferentes e nunca se misturam.
@@ -20,10 +23,13 @@ class CSVReporter:
         rows: dict[str, dict[str, Any]] = {}
         columns: dict[str, None] = {}
         for r in results:
-            model = r["model"].get("label") or r["model"]["name"]
+            model = r["model"].get("display_name") or r["model"].get("label") or r["model"]["name"]
             prefix = f"{r['benchmark']['name']}@{r['benchmark']['version']}|{r['evaluation']['name']}"
             row = rows.setdefault(model, {"model": model})
-            for metric, value in r["metrics"].items():
+            values = dict(r["metrics"])
+            if (r.get("timing") or {}).get("seconds") is not None:
+                values["duration_seconds"] = r["timing"]["seconds"]
+            for metric, value in values.items():
                 col = f"{prefix}|{metric}"
                 columns[col] = None
                 row[col] = (

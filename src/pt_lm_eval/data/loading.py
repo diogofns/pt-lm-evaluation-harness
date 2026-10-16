@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import MISSING, dataclass, fields
 from functools import cache
 
 from ..core.protocols import BENCHMARKS, Evaluation
@@ -42,5 +42,16 @@ def prompt_signature(evaluation: Evaluation, items: Sequence[Item], pool: Sequen
     """
     probe = items[0]
     shot = next((p for p in pool if p.id != probe.id), probe)
-    payload = json.dumps([asdict(r) for r in evaluation.build(probe, [shot])], ensure_ascii=False)
+    payload = json.dumps([_non_default(r) for r in evaluation.build(probe, [shot])], ensure_ascii=False)
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _non_default(request: object) -> dict:
+    """Campos do pedido fora do valor padrão: um campo opcional novo não muda a assinatura."""
+    out = {}
+    for f in fields(request):  # type: ignore[arg-type]
+        value = getattr(request, f.name)
+        default = f.default_factory() if f.default_factory is not MISSING else f.default
+        if value != default:
+            out[f.name] = value
+    return out

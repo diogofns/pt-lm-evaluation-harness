@@ -50,6 +50,25 @@ class MCQItem(Item):
         return LETTERS[: len(self.options)]
 
 
+@dataclass(frozen=True)
+class InstructionItem(Item):
+    """Prompt com instruções verificáveis (IFEval): cada id tem seus parâmetros em `kwargs`."""
+
+    prompt: str
+    instruction_ids: tuple[str, ...]
+    kwargs: tuple[dict[str, Any], ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "instruction_ids", tuple(self.instruction_ids))
+        object.__setattr__(self, "kwargs", tuple(dict(k or {}) for k in self.kwargs))
+        if not self.instruction_ids:
+            raise ValueError(f"item {self.id}: sem instruções")
+        if len(self.kwargs) != len(self.instruction_ids):
+            raise ValueError(
+                f"item {self.id}: {len(self.instruction_ids)} instruções e {len(self.kwargs)} kwargs"
+            )
+
+
 # --- Pedidos (o que uma avaliação pede ao backend) --------------------------
 
 
@@ -106,3 +125,6 @@ Response = LoglikelihoodResponse | GenerateResponse
 class Scored:
     metrics: dict[str, float]  # agregadas como média ± stderr
     details: dict[str, Any] = field(default_factory=dict)  # vai para samples.jsonl
+    # Peso do item na média de uma métrica (padrão 1). Ex.: inst_level_acc do IFEval pesa
+    # pelo número de instruções, para a média ser sobre instruções e não sobre prompts.
+    weights: dict[str, float] = field(default_factory=dict)

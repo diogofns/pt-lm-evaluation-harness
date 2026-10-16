@@ -54,5 +54,19 @@ def with_shots(shots: Sequence[str], query: str) -> str:
 def gen(item: MCQItem, shots: Sequence[MCQItem]) -> str:
     # Termina em "Resposta:" para modelos base completarem com a letra; modelos
     # de chat respondem normalmente.
-    query = f"{question(item)}\n{options(item)}\n\n{GEN_INSTRUCTION}\n{ANSWER_PREFIX}"
+    query = f"{gen_question(item)}\n{ANSWER_PREFIX}"
     return with_shots([mcf(s, with_answer=True) for s in shots], query)
+
+
+def gen_question(item: MCQItem) -> str:
+    return f"{question(item)}\n{options(item)}\n\n{GEN_INSTRUCTION}"
+
+
+def gen_messages(item: MCQItem, shots: Sequence[MCQItem]) -> tuple[dict[str, str], ...]:
+    """Few-shot multi-turn: cada exemplo é uma pergunta do usuário e a resposta do assistente."""
+    messages: list[dict[str, str]] = []
+    for s in shots:
+        messages.append({"role": "user", "content": gen_question(s)})
+        messages.append({"role": "assistant", "content": f"{ANSWER_PREFIX} {s.letters[s.gold]}"})
+    messages.append({"role": "user", "content": gen_question(item)})
+    return tuple(messages)

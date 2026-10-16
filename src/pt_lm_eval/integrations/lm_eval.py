@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 from functools import cache
@@ -123,6 +124,7 @@ async def run_lm_eval_step(step: Step, backend: Backend, cfg: ExperimentConfig, 
     # Chat template só em tarefas de geração: log-likelihood usa o endpoint de completions.
     chat = step.model.uses_chat and task_needs(step.benchmark) == {"generate"}
     lm = _make_lm(backend, asyncio.get_running_loop(), chat, step.model.name)
+    started = time.monotonic()
     out = await asyncio.to_thread(
         simple_evaluate,
         model=lm,
@@ -130,11 +132,14 @@ async def run_lm_eval_step(step: Step, backend: Backend, cfg: ExperimentConfig, 
         num_fewshot=step.num_fewshot,
         limit=step.limit,
         apply_chat_template=chat,
+        # Explícito: o padrão do lm-eval com chat é multi-turn; o nosso, uma só mensagem.
+        fewshot_as_multiturn=step.fewshot_as_multiturn,
         log_samples=True,
         random_seed=cfg.seed,
         numpy_random_seed=cfg.seed,
         fewshot_random_seed=cfg.seed,
     )
+    seconds = round(time.monotonic() - started, 1)
     samples_path = Path(f"{stem}.samples.jsonl")
     with samples_path.open("w") as fh:
         for subtask, samples in out["samples"].items():
@@ -164,10 +169,15 @@ async def run_lm_eval_step(step: Step, backend: Backend, cfg: ExperimentConfig, 
             "name": "lm_eval",
             "num_fewshot": step.num_fewshot,
             "chat_template": chat,
+            "fewshot_as_multiturn": step.fewshot_as_multiturn,
             "seed": cfg.seed,
             "limit": step.limit,
         },
-        "model": {k: v for k, v in asdict(step.model).items() if v not in (None, {}, "")},
+        "timing": {"seconds": seconds},
+        "model": {
+            **{k: v for k, v in asdict(step.model).items() if v not in (None, {}, "")},
+            "display_name": step.model.display_name,
+        },
         "metrics": _metrics(out["results"].get(task) or out["results"][leaves[0]]),
         "by_subject": {t: _metrics(out["results"][t]) for t in leaves} if leaves else {},
         "samples": samples_path.name,

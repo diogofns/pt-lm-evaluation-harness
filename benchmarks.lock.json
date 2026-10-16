@@ -4,7 +4,13 @@
     "prompts": {
       "mcf": "e925643a7e2eac5e",
       "cf": "6c4f652523b5b196",
-      "gen": "43b4006cbbd6a6a3"
+      "gen": "585a8b1ec8e2256a"
+    }
+  },
+  "ifeval_pt@1.0": {
+    "source": "hf:gap-ufg/Portuguese-IFEval:test@0ff3fe8d82a5cdb43153f86b301b2c9d5c6ea098",
+    "prompts": {
+      "ifeval": "69f48cc40f35101e"
     }
   },
   "mmlu_pt_high_school@1.0": {
@@ -12,7 +18,7 @@
     "prompts": {
       "mcf": "f53537270927fe2b",
       "cf": "b8a3a8c0d8547356",
-      "gen": "90a3b2484ff7517f"
+      "gen": "1d66261d9ea97e91"
     }
   },
   "mmlu_pt_high_school_hard@1.0": {
@@ -20,7 +26,7 @@
     "prompts": {
       "mcf": "43589e88ccedce9d",
       "cf": "bd1765346ee87e80",
-      "gen": "eb18911549595817"
+      "gen": "4475e119fe9cc21f"
     }
   },
   "mmlu_pt_sintetico@1.0": {
@@ -28,7 +34,7 @@
     "prompts": {
       "mcf": "76618da3573f6228",
       "cf": "9e9dd41cf624939a",
-      "gen": "24830205e0e8f7cd"
+      "gen": "1c86170a8c5e0d23"
     }
   },
   "mmlu_pt_undergraduate@1.0": {
@@ -36,7 +42,7 @@
     "prompts": {
       "mcf": "3096b91250f8b8c4",
       "cf": "868098de5aacea2e",
-      "gen": "6b06ccdd66887147"
+      "gen": "39009f48bdf63b93"
     }
   },
   "mmlu_pt_undergraduate_hard@1.0": {
@@ -44,7 +50,7 @@
     "prompts": {
       "mcf": "f1090b1d7a1606d9",
       "cf": "458ba9f1a3f1dac1",
-      "gen": "3c853ab64d2ac6f7"
+      "gen": "8e9e326b18df8ec3"
     }
   },
   "mmmlu_pt_br@1.0": {
@@ -52,7 +58,7 @@
     "prompts": {
       "mcf": "ee738cad64632e3f",
       "cf": "d72773df35c7ccd3",
-      "gen": "8e2f7e9614d58386"
+      "gen": "53ca5083b52ebc50"
     }
   }
 }
