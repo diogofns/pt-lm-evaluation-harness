@@ -42,6 +42,8 @@ tem sentido acima do acaso.
 - [x] `fewshot_as_multiturn` (experimento ou benchmark): few-shot como turnos
       usuário/assistente em modelos de chat; também repassado à ponte com o lm-eval
 - [x] `acc_norm` e `random_baseline` nos resultados
+- [x] Avaliações escolhidas pelo `type` do modelo: base roda as de log-likelihood do benchmark,
+      instruct/api as de geração; benchmark sem avaliação do cenário aparece como "não se aplica"
 - [x] IFEval PT como benchmark nativo (`ifeval_pt`, dataset `gap-ufg/Portuguese-IFEval`)
 - [ ] Rodar `mmlu_pt` e `mmlu_pt_sintetico` de ponta a ponta
 

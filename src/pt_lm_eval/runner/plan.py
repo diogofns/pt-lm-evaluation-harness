@@ -26,12 +26,34 @@ class Step:
     fewshot_as_multiturn: bool = False
 
 
+# Cenário de cada tipo de modelo (guia do OpenEvals): base por log-likelihood,
+# instruct e API por geração. Cada benchmark roda as avaliações dele desse tipo.
+SCENARIO = {
+    "base": frozenset({"loglikelihood"}),
+    "instruct": frozenset({"generate"}),
+    "api": frozenset({"generate"}),
+}
+
+
 def build_plan(cfg: ExperimentConfig) -> list[Step]:
     steps = []
     for model in cfg.models:
         capabilities = BACKENDS.get(model.backend).capabilities(model)
         for run in cfg.benchmarks:
-            for evaluation in _evaluations(run):
+            evaluations = [e for e in _evaluations(run) if needs(run.name, e) <= SCENARIO[model.type]]
+            if not evaluations:
+                steps.append(
+                    Step(
+                        model=model,
+                        benchmark=run.name,
+                        evaluation="-",
+                        num_fewshot=None,
+                        fewshot_strategy=run.fewshot_strategy or cfg.fewshot_strategy,
+                        limit=_limit(run, cfg),
+                        skip_reason=f"não se aplica a modelos {model.type}",
+                    )
+                )
+            for evaluation in evaluations:
                 missing = needs(run.name, evaluation) - capabilities
                 if is_lm_eval(run.name):  # sem num_fewshot explícito, vale o padrão da tarefa
                     shots = run.num_fewshot
@@ -77,6 +99,7 @@ def needs(benchmark: str, evaluation: str) -> frozenset[str]:
 
 
 def _evaluations(run: BenchmarkRun) -> tuple[str, ...]:
+    """Avaliações declaradas pelo benchmark; `evaluations` no YAML só restringe a lista."""
     if is_lm_eval(run.name):
         return ("lm_eval",)
     declared = BENCHMARKS.get(run.name).evaluations
@@ -104,7 +127,7 @@ def format_plan(steps: list[Step]) -> str:
                 s.model.display_name,
                 s.benchmark,
                 s.evaluation,
-                "padrão" if s.num_fewshot is None else str(s.num_fewshot),
+                "-" if s.evaluation == "-" else "padrão" if s.num_fewshot is None else str(s.num_fewshot),
                 status,
             )
         )

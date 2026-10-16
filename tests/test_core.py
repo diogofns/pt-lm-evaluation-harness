@@ -412,6 +412,7 @@ def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
             "benchmarks": ["_contexto_teste"],
             "models": [
                 {"name": "i", "type": "instruct", "generate": {"max_tokens": 30}},
+                {"name": "b", "type": "base"},
                 {"name": "g", "type": "api", "base_url": "http://x"},
             ],
         }
@@ -419,7 +420,7 @@ def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
     checks = {(c.step.model.name, c.step.evaluation): c for c in lengths.check_lengths(build_plan(cfg), cfg)}
     gen = checks[("i", "gen")]
     assert (gen.n_items, gen.over, gen.limit) == (2, 1, 60) and not gen.ok  # só a pergunta longa estoura
-    assert checks[("i", "mcf")].over == 0 and checks[("i", "mcf")].ok
+    assert checks[("b", "mcf")].over == 0 and checks[("b", "mcf")].ok
     assert checks[("g", "gen")].note == "API: sem tokenizer local" and checks[("g", "gen")].ok
     assert "1 itens não cabem" in lengths.format_lengths(list(checks.values()))
 
@@ -470,7 +471,38 @@ def test_benchmark_parameters_override_the_general_ones():
             ],
         }
     )
-    got = {s.benchmark: (s.limit, s.num_fewshot) for s in build_plan(cfg)}
-    assert got == {"energy_regulacao": (100, 3), "mmmlu_pt_br": (None, 0), "ifeval_pt": (10, 3)}
+    got = {s.benchmark: (s.limit, s.num_fewshot) for s in build_plan(cfg) if not s.skip_reason}
+    assert got == {"energy_regulacao": (100, 3), "mmmlu_pt_br": (None, 0)}
     with pytest.raises(ValueError, match="'all'"):
         parse_config({**general, "benchmarks": [{"name": "ifeval_pt", "limit": "tudo"}]})
+
+
+def test_evaluations_follow_the_model_type():
+    from pt_lm_eval.runner.plan import build_plan
+
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "models": [
+                {"name": "b", "type": "base"},
+                {"name": "i", "type": "instruct"},
+                {"name": "a", "type": "api", "base_url": "http://x"},
+            ],
+            "benchmarks": [
+                "energy_regulacao",
+                "ifeval_pt",
+                {"name": "mmmlu_pt_br", "evaluations": ["cf", "gen"]},
+            ],
+        }
+    )
+    plan = {}
+    for s in build_plan(cfg):
+        plan.setdefault(s.model.name, []).append(s.skip_reason or f"{s.benchmark}/{s.evaluation}")
+    assert plan["b"] == [
+        "energy_regulacao/mcf",
+        "energy_regulacao/cf",
+        "não se aplica a modelos base",
+        "mmmlu_pt_br/cf",
+    ]
+    assert plan["i"] == ["energy_regulacao/gen", "ifeval_pt/ifeval", "mmmlu_pt_br/gen"]
+    assert plan["a"] == plan["i"]

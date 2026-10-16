@@ -52,8 +52,10 @@ Um YAML com três partes (exemplo completo em `configs/exemplo.yaml`):
 |---|---|
 | geral (topo do arquivo) | `experiment`, `seed`, `limit`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `server` (vLLM e `max_model_len`), `reporters` |
 | `models` | cada modelo: `name`, `type` (base, instruct ou api), `thinking`, `generate` (`max_tokens`, `temperature`…), `server_args`, `system_prompt` |
-| `benchmarks` | cada dataset: `name`, `evaluations`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `limit` (número ou `all`) |
+| `benchmarks` | cada dataset: `name`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `limit` (número ou `all`) |
 
+As avaliações não se escolhem no YAML: vêm do `type` do modelo (tabela de cenários acima)
+e do que cada benchmark declara; `evaluations` num benchmark, se usado, só restringe essa lista.
 O que vem no benchmark ou no modelo sobrescreve o geral; `server_args` de um modelo
 se soma a `server.args`. Chaves desconhecidas são erro, para pegar erros de digitação.
 Rode com `--dry-run` antes: mostra o plano e confere se os prompts cabem no contexto.
