@@ -1,54 +1,73 @@
 # Experimento de exemplo. Rode com:
-#   pt-lm-eval run configs/exemplo.yaml --dry-run   (só o plano)
+#   pt-lm-eval run configs/exemplo.yaml --dry-run   (plano + checagem de contexto)
 #   pt-lm-eval run configs/exemplo.yaml
+#
+# Três partes: a configuração geral vale para tudo; cada modelo e cada benchmark
+# pode trazer os próprios parâmetros, que sobrescrevem os gerais.
 
-experiment: exemplo
+# --- Geral (transversal) ------------------------------------------------------------
+
+experiment: exemplo         # saída em <output_dir>/<experiment>/
 output_dir: output
-seed: 1234
-limit: 100              # itens por benchmark, sorteados com a seed (omita para usar todos)
-num_fewshot: 0          # padrão; cada benchmark pode sobrescrever
-fewshot_strategy: random  # random | first_n
-fewshot_as_multiturn: false  # em chat: exemplos como turnos usuário/assistente; cada benchmark pode sobrescrever
+seed: 1234                  # sorteio de itens (limit) e de exemplos few-shot
+limit: 100                  # itens por benchmark (omita para usar todos)
+num_fewshot: 0              # padrão dos benchmarks
+fewshot_strategy: random    # random | first_n
+fewshot_as_multiturn: false # em chat: exemplos como turnos usuário/assistente
+reporters: [csv]
 
-server:
+server:                     # vLLM gerenciado (modelos sem base_url)
   kind: vllm
-  mode: local           # local (processo) | docker (exige image)
+  mode: local               # local (processo) | docker (exige image)
   port: 8000
-  executable: vllm      # caminho do binário do vLLM, se não estiver no PATH
+  executable: vllm          # caminho do binário do vLLM, se não estiver no PATH
   # image: vllm/vllm-openai:v0.24.0
-  args:                 # flags do `vllm serve`, em snake_case
-    max_model_len: 8192
+  args:                     # flags do `vllm serve` em snake_case; cada modelo soma as suas
+    max_model_len: 8192     # o --dry-run confere se os prompts cabem aqui
     gpu_memory_utilization: 0.85
 
-benchmarks:
-  - energy_regulacao                                   # todas as avaliações declaradas
-  - name: mmmlu_pt_br
-    evaluations: [mcf, cf]
-    num_fewshot: 5
+# --- Modelos --------------------------------------------------------------------------
+# type: base     → log-likelihood (mcf/cf) e geração sem chat template
+# type: instruct → log-likelihood e geração com chat template
+# type: api      → só geração (mcf/cf aparecem como "pulado")
+# Parâmetros por modelo: thinking, generate (max_tokens, temperature, ...),
+# server_args (somados a server.args), system_prompt, chat_template, label, base_url.
 
 models:
   - name: Qwen/Qwen2.5-0.5B
-    type: base                                         # log-likelihood + geração sem chat template
+    type: base
 
   - name: Qwen/Qwen3-4B-Instruct-2507
-    type: instruct                                     # log-likelihood + geração com chat template
+    type: instruct
     generate: {max_tokens: 1024}
 
   # O mesmo modelo com e sem raciocínio: cada um vira uma linha no relatório
   # (Qwen/Qwen3-30B-A3B:thinking e Qwen/Qwen3-30B-A3B:no-thinking).
   # - name: Qwen/Qwen3-30B-A3B
   #   type: instruct
-  #   thinking: true                                   # chat_template_kwargs.enable_thinking
-  #   server_args: {reasoning_parser: qwen3}
+  #   thinking: true                      # chat_template_kwargs.enable_thinking
+  #   server_args: {reasoning_parser: qwen3, max_model_len: 32768}
   #   generate: {max_tokens: 16384}
   # - name: Qwen/Qwen3-30B-A3B
   #   type: instruct
   #   thinking: false
+  #   server_args: {reasoning_parser: qwen3}
 
   # - name: gpt-5.4-mini
-  #   type: api                                        # só geração; mcf/cf aparecem como "pulado"
+  #   type: api
   #   base_url: https://api.openai.com/v1
   #   api_key_env: OPENAI_API_KEY
   #   generate: {reasoning_effort: low, temperature: null}
 
-reporters: [csv]
+# --- Benchmarks (datasets) ------------------------------------------------------------
+# Só o nome = todas as avaliações declaradas, com os parâmetros gerais.
+# Parâmetros por benchmark: evaluations, num_fewshot, fewshot_strategy,
+# fewshot_as_multiturn, limit (número ou all). Lista: pt-lm-eval benchmarks list
+
+benchmarks:
+  - energy_regulacao
+  - name: mmmlu_pt_br
+    evaluations: [mcf, cf]
+    num_fewshot: 5
+  - name: ifeval_pt                       # só modelos com geração; precisa do extra `ifeval`
+    limit: all                            # todos os 535 prompts, apesar do limit geral

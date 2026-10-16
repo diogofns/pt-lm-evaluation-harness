@@ -45,7 +45,7 @@ def build_plan(cfg: ExperimentConfig) -> list[Step]:
                         evaluation=evaluation,
                         num_fewshot=shots,
                         fewshot_strategy=run.fewshot_strategy or cfg.fewshot_strategy,
-                        limit=run.limit if run.limit is not None else cfg.limit,
+                        limit=_limit(run, cfg),
                         skip_reason=f"backend sem {', '.join(sorted(missing))}" if missing else None,
                         fewshot_as_multiturn=multiturn,
                     )
@@ -64,6 +64,12 @@ def _multiturn(
     if not getattr(EVALUATIONS.get(evaluation), "supports_multiturn", False):
         raise ValueError(f"{run.name}: a avaliação {evaluation} não suporta fewshot_as_multiturn")
     return bool(shots)
+
+
+def _limit(run: BenchmarkRun, cfg: ExperimentConfig) -> int | None:
+    if run.limit == "all":
+        return None
+    return run.limit if run.limit is not None else cfg.limit  # type: ignore[return-value]
 
 
 def needs(benchmark: str, evaluation: str) -> frozenset[str]:

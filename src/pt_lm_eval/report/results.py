@@ -45,31 +45,35 @@ def describe_requests(requests: list[Request]) -> dict[str, Any]:
     return out
 
 
-def aggregate(records: list[dict]) -> dict[str, Any]:
-    """Média ± stderr por métrica; com várias matérias, a principal é a média entre matérias."""
+def aggregate(records: list[dict], cf_normalization: str = "char") -> dict[str, Any]:
+    """Média ± stderr por métrica; com várias matérias, a principal é a média entre matérias.
+
+    Com acc_char e acc_token (CF), `acc_norm` repete a normalização fixada pelo benchmark,
+    a mesma para todos os modelos, para que a comparação entre eles seja justa.
+    """
     by_subject: dict[str, list[dict]] = defaultdict(list)
     for r in records:
         by_subject[r.get("subject") or "(sem matéria)"].append(r)
-    micro = _with_norm_max(_mean_metrics(records))
+
+    def norm(metrics: dict[str, float]) -> dict[str, float]:
+        return _with_acc_norm(metrics, cf_normalization)
+
+    micro = norm(_mean_metrics(records))
     if len(by_subject) == 1:
         return {"metrics": micro}
-    subjects = {
-        s: {"n": len(rs), **_with_norm_max(_mean_metrics(rs))} for s, rs in sorted(by_subject.items())
-    }
+    subjects = {s: {"n": len(rs), **norm(_mean_metrics(rs))} for s, rs in sorted(by_subject.items())}
     macro = {}
     for name in _metric_names(records):
         groups = [[r["metrics"][name] for r in rs if name in r["metrics"]] for rs in by_subject.values()]
         macro[name], macro[f"{name}_stderr"] = macro_mean_stderr(groups)
-    return {"metrics": _with_norm_max(macro), "metrics_micro": micro, "by_subject": subjects}
+    return {"metrics": norm(macro), "metrics_micro": micro, "by_subject": subjects}
 
 
-def _with_norm_max(metrics: dict[str, float]) -> dict[str, float]:
-    """acc_norm_max = o maior entre acc_char e acc_token, a métrica de CF mais confiável
-    segundo o guia do OpenEvals (a melhor normalização varia com a língua e o tokenizer)."""
-    if "acc_char" not in metrics or "acc_token" not in metrics:
+def _with_acc_norm(metrics: dict[str, float], cf_normalization: str) -> dict[str, float]:
+    source = f"acc_{cf_normalization}"
+    if source not in metrics:
         return metrics
-    best = max(("acc_char", "acc_token"), key=lambda m: metrics[m])
-    return {**metrics, "acc_norm_max": metrics[best], "acc_norm_max_stderr": metrics[f"{best}_stderr"]}
+    return {**metrics, "acc_norm": metrics[source], "acc_norm_stderr": metrics[f"{source}_stderr"]}
 
 
 def build_result(
@@ -105,6 +109,7 @@ def build_result(
             "num_fewshot": step.num_fewshot,
             "fewshot_strategy": step.fewshot_strategy,
             "fewshot_as_multiturn": step.fewshot_as_multiturn,
+            "cf_normalization": bench.cf_normalization,
             "seed": cfg.seed,
             "limit": step.limit,
             "fingerprint": fingerprint,
@@ -117,7 +122,7 @@ def build_result(
             if model.base_url
             else {**asdict(cfg.server), "args": {**cfg.server.args, **model.server_args}},
         },
-        **aggregate(records),
+        **aggregate(records, bench.cf_normalization),
         "samples": samples_path,
     }
 

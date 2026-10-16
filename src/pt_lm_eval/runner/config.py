@@ -79,7 +79,11 @@ class BenchmarkRun:
     num_fewshot: int | None = None
     fewshot_strategy: str | None = None
     fewshot_as_multiturn: bool | None = None
-    limit: int | None = None
+    limit: int | str | None = None  # None = o geral; "all" = todos os itens, mesmo com limit geral
+
+    def __post_init__(self) -> None:
+        if isinstance(self.limit, str) and self.limit != "all":
+            raise ValueError(f"benchmark {self.name}: limit deve ser um número ou 'all', veio {self.limit!r}")
 
 
 @dataclass(frozen=True)

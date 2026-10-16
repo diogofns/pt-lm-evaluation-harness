@@ -16,7 +16,7 @@ sucede o `light-benchmark`. A referência de método é o
 |---|---|---|
 | Método | log-likelihood, sem chat template | geração com chat template |
 | Formulações | CF (sinal cedo no treino), MCF (modelos mais treinados) | geração livre com extração da letra; IFEval |
-| Métrica principal | `acc_norm_max` = máx(`acc_char`, `acc_token`); `acc_pmi` em conhecimento difícil | `acc`, com `extracted` e `truncated` |
+| Métrica principal | `acc_norm` = normalização fixada no benchmark (padrão `acc_char`); `acc_pmi` em conhecimento difícil | `acc`, com `extracted` e `truncated` |
 | Controles | `num_fewshot`, BOS | `thinking` on/off, `fewshot_as_multiturn`, `system_prompt` |
 
 Todo resultado de múltipla escolha traz `random_baseline`, porque um número só
@@ -41,7 +41,7 @@ tem sentido acima do acaso.
       cada modo vira uma linha do relatório (`modelo:thinking`, `modelo:no-thinking`)
 - [x] `fewshot_as_multiturn` (experimento ou benchmark): few-shot como turnos
       usuário/assistente em modelos de chat; também repassado à ponte com o lm-eval
-- [x] `acc_norm_max` e `random_baseline` nos resultados
+- [x] `acc_norm` e `random_baseline` nos resultados
 - [x] IFEval PT como benchmark nativo (`ifeval_pt`, dataset `gap-ufg/Portuguese-IFEval`)
 - [ ] Rodar `mmlu_pt` e `mmlu_pt_sintetico` de ponta a ponta
 
@@ -58,7 +58,8 @@ referência nos testes de paridade.
 - [x] Porta ocupada é recusada, e o servidor precisa servir o modelo pedido
 - [x] IFEval PT nativo: 31 verificadores portados, paridade exata com o código da referência
       (0 diferenças em 64.376 vereditos); a ponte `lm_eval:` deixa de ser necessária para o IFEval
-- [ ] Normalização de CF fixada por benchmark (hoje `acc_norm_max` escolhe por modelo)
+- [x] Normalização de CF fixada por benchmark (`cf_normalization`, padrão `char`): `acc_norm`
+      usa a mesma para todos os modelos (antes, `acc_norm_max` escolhia por modelo)
 - [ ] Registrar versão do vLLM / imagem nos resultados
 - [ ] Distribuir modelos entre GPUs livres; reaproveitar o servidor entre entradas do mesmo modelo
 - [x] CI dos benchmarks também em `data/` e `core/`; teste de rede passa a exigir a trava
@@ -66,13 +67,18 @@ referência nos testes de paridade.
 - [x] Prompt maior que o contexto: resolvido pela configuração (`max_model_len`, `num_fewshot`,
       `max_tokens`, thinking); o `--dry-run` mede cada item com o tokenizer do modelo e aponta
       quantos não cabem, sem cortar nada
-- [ ] MMLU-PT (graduação): 1 item com imagens base64 nas alternativas (`stem-1605`, ~63 mil
-      tokens) e ~3% dos itens com a letra repetida nas alternativas ("A. A) …"); limpar exige
-      subir a versão do benchmark
-- [x] Tempo de cada avaliação no `results.json` (`timing`) e no CSV (`duration_seconds`),
-      somado entre retomadas da mesma configuração
 - [ ] Menor: vLLM local escutando em 127.0.0.1
 - [ ] Decidir a licença (hoje Apache-2.0)
+
+## Problemas conhecidos dos datasets (fora do escopo)
+
+Não mexemos nos datasets; o foco é o framework avaliar corretamente. Registrados para
+quem for interpretar os números:
+
+- MMLU-PT (graduação): o item `stem-1605` traz imagens base64 nas alternativas (~63 mil
+  tokens; o `--dry-run` aponta) e ~3% dos itens repetem a letra nas alternativas ("A. A) …").
+- Portuguese-IFEval: no item 50, o `prompt_to_repeat` difere do prompt enviado, e quem
+  repete o prompt corretamente é reprovado nessa instrução.
 
 ## Depois do escopo atual
 

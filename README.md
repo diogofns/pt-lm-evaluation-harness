@@ -17,7 +17,7 @@ Seguindo o [guia de avaliação do OpenEvals](https://huggingface.co/spaces/Open
 |---|---|---|
 | Como | log-likelihood, sem chat template | geração com chat template |
 | Avaliações | `cf`, `cf_pmi`, `mcf` | `gen` (extração da letra), `ifeval` (IFEval PT nativo) |
-| Métrica principal | `acc_norm_max` (CF) ou `acc` (MCF) | `acc`; IFEval: `prompt_level_strict_acc` |
+| Métrica principal | `acc_norm` (CF, normalização fixada no benchmark) ou `acc` (MCF) | `acc`; IFEval: `prompt_level_strict_acc` |
 | Opções | `num_fewshot` | `thinking`, `fewshot_as_multiturn`, `system_prompt` |
 
 Todo resultado de múltipla escolha traz `random_baseline` (Σ 1/nº de opções) para
@@ -44,7 +44,19 @@ pt-lm-eval run configs/exemplo.yaml --dry-run       # plano + confere se os prom
 pt-lm-eval run configs/exemplo.yaml
 ```
 
-Veja `configs/exemplo.yaml` para todas as opções do experimento.
+## Configuração do experimento
+
+Um YAML com três partes (exemplo completo em `configs/exemplo.yaml`):
+
+| Parte | O que define |
+|---|---|
+| geral (topo do arquivo) | `experiment`, `seed`, `limit`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `server` (vLLM e `max_model_len`), `reporters` |
+| `models` | cada modelo: `name`, `type` (base, instruct ou api), `thinking`, `generate` (`max_tokens`, `temperature`…), `server_args`, `system_prompt` |
+| `benchmarks` | cada dataset: `name`, `evaluations`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `limit` (número ou `all`) |
+
+O que vem no benchmark ou no modelo sobrescreve o geral; `server_args` de um modelo
+se soma a `server.args`. Chaves desconhecidas são erro, para pegar erros de digitação.
+Rode com `--dry-run` antes: mostra o plano e confere se os prompts cabem no contexto.
 
 ## Licença
 

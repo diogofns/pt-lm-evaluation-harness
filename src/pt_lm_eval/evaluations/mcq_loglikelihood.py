@@ -4,8 +4,8 @@
 - cf:     opções fora do prompt; pontua " <texto da opção>".
 - cf_pmi: cf + acc_pmi, que custa o dobro de pedidos.
 
-Todas registram random_baseline (1/nº de opções); com acc_char e acc_token, o
-resultado agregado ganha acc_norm_max (ver report/results.py).
+Todas registram random_baseline (1/nº de opções). No CF, o resultado agregado ganha
+acc_norm, a normalização fixada pelo benchmark (`cf_normalization`, padrão acc_char).
 """
 
 from __future__ import annotations

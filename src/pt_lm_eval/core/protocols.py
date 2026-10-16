@@ -31,12 +31,18 @@ class Source(Protocol):
     def describe(self) -> str: ...  # identificação reproduzível, ex.: "hf:org/ds:test@<sha>"
 
 
+CF_NORMALIZATIONS = ("char", "token")
+
+
 @dataclass(frozen=True)
 class Benchmark:
     """O quê: dados e conversão de cada linha em item.
 
     `to_item` pode devolver None para descartar uma linha inválida; o total de
     descartes aparece no `benchmarks check` e no results.json.
+
+    `cf_normalization` fixa qual normalização do CF vira `acc_norm`, igual para todos
+    os modelos: "char" (padrão, não depende do tokenizer) ou "token".
     """
 
     version: str
@@ -46,6 +52,13 @@ class Benchmark:
     fewshot_source: Source | None = None  # None = sorteia do próprio conjunto, sem o item
     description: str = ""
     card: Path | None = None  # README.md com fonte, licença, construção etc.
+    cf_normalization: str = "char"
+
+    def __post_init__(self) -> None:
+        if self.cf_normalization not in CF_NORMALIZATIONS:
+            raise ValueError(
+                f"cf_normalization deve ser uma de {CF_NORMALIZATIONS}, veio {self.cf_normalization!r}"
+            )
 
 
 class Evaluation(Protocol):

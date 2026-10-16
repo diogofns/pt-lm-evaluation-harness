@@ -136,15 +136,23 @@ def test_aggregate_uses_macro_average_across_subjects():
     assert agg["by_subject"]["a"]["n"] == 3
 
 
-def test_aggregate_acc_norm_max_takes_the_better_normalization():
+def test_acc_norm_follows_the_benchmark_normalization_for_every_model():
     records = [
         {"metrics": {"acc_char": 1.0, "acc_token": 0.0}},
-        {"metrics": {"acc_char": 1.0, "acc_token": 1.0}},
+        {"metrics": {"acc_char": 0.0, "acc_token": 0.0}},
     ]
-    metrics = aggregate(records)["metrics"]
-    assert metrics["acc_norm_max"] == metrics["acc_char"] == 1.0
-    assert metrics["acc_norm_max_stderr"] == metrics["acc_char_stderr"]
-    assert "acc_norm_max" not in aggregate([{"metrics": {"acc": 1.0}}])["metrics"]
+    by_char = aggregate(records)["metrics"]  # padrão: char, mesmo que token fosse melhor ou pior
+    assert by_char["acc_norm"] == by_char["acc_char"] == 0.5
+    assert by_char["acc_norm_stderr"] == by_char["acc_char_stderr"]
+    assert aggregate(records, "token")["metrics"]["acc_norm"] == 0.0
+    assert "acc_norm" not in aggregate([{"metrics": {"acc": 1.0}}])["metrics"]
+
+
+def test_benchmark_rejects_unknown_cf_normalization():
+    from pt_lm_eval import Benchmark
+
+    with pytest.raises(ValueError, match="cf_normalization"):
+        Benchmark(version="1", source=None, to_item=None, evaluations=("cf",), cf_normalization="pmi")
 
 
 # --- configuração -------------------------------------------------------------------
@@ -446,3 +454,23 @@ def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path
     path = CSVReporter().write(execute.collect_results(cfg.out_dir), cfg.out_dir, "t")
     assert "_contexto_teste@1|gen|duration_seconds" in path.read_text().splitlines()[0]
     assert json.loads(next(cfg.out_dir.glob("*/*.results.json")).read_text())["evaluation"]["fingerprint"]
+
+
+def test_benchmark_parameters_override_the_general_ones():
+    from pt_lm_eval.runner.plan import build_plan
+
+    general = {"experiment": "x", "limit": 100, "num_fewshot": 3, "models": [{"name": "m", "type": "base"}]}
+    cfg = parse_config(
+        {
+            **general,
+            "benchmarks": [
+                {"name": "energy_regulacao", "evaluations": ["mcf"]},
+                {"name": "mmmlu_pt_br", "evaluations": ["mcf"], "limit": "all", "num_fewshot": 0},
+                {"name": "ifeval_pt", "limit": 10},
+            ],
+        }
+    )
+    got = {s.benchmark: (s.limit, s.num_fewshot) for s in build_plan(cfg)}
+    assert got == {"energy_regulacao": (100, 3), "mmmlu_pt_br": (None, 0), "ifeval_pt": (10, 3)}
+    with pytest.raises(ValueError, match="'all'"):
+        parse_config({**general, "benchmarks": [{"name": "ifeval_pt", "limit": "tudo"}]})
