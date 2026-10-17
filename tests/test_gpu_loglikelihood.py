@@ -12,8 +12,8 @@ import os
 
 import pytest
 
-from pt_lm_eval.backends.openai_compat import OpenAICompatBackend, OpenAICompatSettings
-from pt_lm_eval.core.types import LoglikelihoodRequest
+from pt_lm_eval.client import Client
+from pt_lm_eval.core import LoglikelihoodRequest
 
 pytestmark = pytest.mark.gpu
 
@@ -40,14 +40,12 @@ def setup():
     from transformers import AutoModelForCausalLM
 
     hf = AutoModelForCausalLM.from_pretrained(model, dtype=torch.bfloat16).cuda().eval()
-    backend = OpenAICompatBackend(
-        OpenAICompatSettings(model=model, base_url=url, chat=False, tokenizer=model)
-    )
+    backend = Client(model=model, base_url=url, chat=False, tokenizer=model)
     return torch, hf, backend
 
 
 def _hf_loglikelihood(torch, hf, backend, context, continuation):
-    ctx, cont = backend._pair_tokenizer().encode_pair(context, continuation)
+    ctx, cont = backend.pair_tokenizer().encode_pair(context, continuation)
     ids = torch.tensor([ctx + cont]).cuda()
     with torch.no_grad():
         logprobs = torch.log_softmax(hf(ids).logits.float(), dim=-1)[0]

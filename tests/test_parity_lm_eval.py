@@ -23,9 +23,10 @@ from pathlib import Path
 
 import pytest
 
-from pt_lm_eval.backends.openai_compat import OpenAICompatBackend, OpenAICompatSettings
-from pt_lm_eval.core.types import LoglikelihoodRequest, LoglikelihoodResponse
-from pt_lm_eval.metrics.accuracy import argmax, choice_accuracy
+from pt_lm_eval import EVALUATIONS, MCQItem
+from pt_lm_eval.client import Client
+from pt_lm_eval.core import LoglikelihoodRequest, LoglikelihoodResponse
+from pt_lm_eval.mcq import argmax
 
 pytestmark = pytest.mark.parity
 
@@ -59,9 +60,7 @@ def parity():
         pytest.skip("defina PT_LM_EVAL_URL, PT_LM_EVAL_MODEL e PT_LM_EVAL_PARITY_DIR")
     docs = _load_lm_eval_samples(Path(root))
     # add_bos=False: o lm-eval não adiciona BOS nas requisições de API.
-    backend = OpenAICompatBackend(
-        OpenAICompatSettings(model=model, base_url=url, chat=False, tokenizer=model, add_bos=False)
-    )
+    backend = Client(model=model, base_url=url, chat=False, tokenizer=model, add_bos=False)
 
     async def run():
         try:
@@ -80,7 +79,8 @@ def test_metrics_match_lm_eval_on_its_own_logprobs(parity):
     """Mesmos logprobs → mesmas métricas: acc idêntico e acc_norm = nosso acc_char."""
     for d in parity:
         fake = [LoglikelihoodResponse(lp, False, 1) for lp in d["lls"]]
-        got = choice_accuracy(fake, d["gold"], [c.strip() for _, c in d["pairs"]])
+        item = MCQItem(id="x", question="?", options=tuple(c.strip() for _, c in d["pairs"]), gold=d["gold"])
+        got = EVALUATIONS.get("cf").score(item, fake).metrics
         assert got["acc"] == d["acc"]
         assert got["acc_char"] == d["acc_norm"]
 

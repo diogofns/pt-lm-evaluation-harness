@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pt-lm-eval"
 version = "0.1.0"
-description = "Avaliador de LLMs em português: pequeno, auditável e extensível por plugins."
+description = "Avaliador de LLMs em português: pequeno e auditável."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
@@ -30,30 +30,6 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
 pt-lm-eval = "pt_lm_eval.cli:main"
-
-# Tudo que vem com o projeto é registrado como plugin, igual ao que vier de fora.
-# Cada entrada aponta para um módulo; importá-lo registra o que ele define.
-[project.entry-points."pt_lm_eval.evaluations"]
-mcq_loglikelihood = "pt_lm_eval.evaluations.mcq_loglikelihood"
-mcq_generate = "pt_lm_eval.evaluations.mcq_generate"
-instruction_following = "pt_lm_eval.evaluations.instruction_following"
-
-[project.entry-points."pt_lm_eval.backends"]
-openai_compat = "pt_lm_eval.backends.openai_compat"
-
-[project.entry-points."pt_lm_eval.reporters"]
-csv = "pt_lm_eval.report.csv_reporter"
-
-[project.entry-points."pt_lm_eval.benchmarks"]
-belebele_pt = "pt_lm_eval.benchmarks.belebele_pt.benchmark"
-enem = "pt_lm_eval.benchmarks.enem.benchmark"
-energy_regulacao = "pt_lm_eval.benchmarks.energy_regulacao.benchmark"
-global_mmlu_pt = "pt_lm_eval.benchmarks.global_mmlu_pt.benchmark"
-ifeval_pt = "pt_lm_eval.benchmarks.ifeval_pt.benchmark"
-mmlu_pt = "pt_lm_eval.benchmarks.mmlu_pt.benchmark"
-mmlu_pt_sintetico = "pt_lm_eval.benchmarks.mmlu_pt_sintetico.benchmark"
-mmmlu_pt_br = "pt_lm_eval.benchmarks.mmmlu_pt_br.benchmark"
-oab_exams = "pt_lm_eval.benchmarks.oab_exams.benchmark"
 
 [tool.hatch.metadata]
 allow-direct-references = true  # modelo do spaCy, distribuído só por URL

@@ -16,7 +16,7 @@ Seguindo o [guia de avaliação do OpenEvals](https://huggingface.co/spaces/Open
 | | Modelos base (`type: base`) | Modelos instruct (`type: instruct`/`api`) |
 |---|---|---|
 | Como | log-likelihood, sem chat template | geração com chat template |
-| Avaliações | `cf`, `cf_pmi`, `mcf` | `gen` (extração da letra), `ifeval` (IFEval PT nativo) |
+| Avaliações | `cf`, `mcf` | `gen` (extração da letra), `ifeval` (IFEval PT nativo) |
 | Métrica principal | `acc_norm` (CF, normalização fixada no benchmark) ou `acc` (MCF) | `acc`; IFEval: `prompt_level_strict_acc` |
 | Opções | `num_fewshot` | `thinking`, `fewshot_as_multiturn`, `system_prompt` |
 
@@ -50,9 +50,9 @@ Um YAML com três partes (exemplo completo em `configs/exemplo.yaml`):
 
 | Parte | O que define |
 |---|---|
-| geral (topo do arquivo) | `experiment`, `seed`, `limit`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `server` (vLLM e `max_model_len`), `reporters` |
+| geral (topo do arquivo) | `experiment`, `seed`, `limit`, `num_fewshot`, `fewshot_as_multiturn`, `server` (vLLM e `max_model_len`) |
 | `models` | cada modelo: `name`, `type` (base, instruct ou api), `thinking`, `generate` (`max_tokens`, `temperature`…), `server_args`, `system_prompt` |
-| `benchmarks` | cada dataset: `name`, `num_fewshot`, `fewshot_strategy`, `fewshot_as_multiturn`, `limit` (número ou `all`) |
+| `benchmarks` | cada dataset: `name`, `num_fewshot`, `fewshot_as_multiturn`, `limit` (número ou `all`) |
 
 As avaliações não se escolhem no YAML: vêm do `type` do modelo (tabela de cenários acima)
 e do que cada benchmark declara; `evaluations` num benchmark, se usado, só restringe essa lista.

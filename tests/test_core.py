@@ -7,15 +7,14 @@ import math
 import pytest
 
 from pt_lm_eval import BENCHMARKS, EVALUATIONS, MCQItem, columns, letter_index
-from pt_lm_eval.backends.openai_compat import _continuation_logprob
-from pt_lm_eval.backends.tokenization import truncate_left
-from pt_lm_eval.core.registry import Registry
-from pt_lm_eval.core.types import LoglikelihoodResponse
-from pt_lm_eval.data.fewshot import select_shots
-from pt_lm_eval.metrics.accuracy import argmax, choice_accuracy
-from pt_lm_eval.metrics.stats import macro_mean_stderr, mean_stderr
-from pt_lm_eval.report.results import aggregate
-from pt_lm_eval.runner.config import parse_config
+from pt_lm_eval.client import Client, continuation_logprob, truncate_left
+from pt_lm_eval.config import parse_config
+from pt_lm_eval.core import GenerateRequest, GenerateResponse, LoglikelihoodResponse, Registry
+from pt_lm_eval.data import answer_index, non_default, select_shots
+from pt_lm_eval.mcq import argmax
+from pt_lm_eval.report import aggregate, collect_results, macro_mean_stderr, mean_stderr, write_csv
+from pt_lm_eval.run import Experiment, SmokeTestError, smoke_test
+from pt_lm_eval.server import ServerError, vllm_server
 
 ITEM = MCQItem(id="q1", question="Quanto é 2 + 2?", options=("3", "4", "5"), gold=1, subject="mat")
 
@@ -35,7 +34,7 @@ def test_mcq_item_validates_gold_and_options():
 
 
 def test_registry_rejects_duplicates_and_suggests_names():
-    reg: Registry[int] = Registry("coisa", "grupo.inexistente")
+    reg: Registry[int] = Registry("coisa")
     reg.register("energia", 1)
     with pytest.raises(ValueError, match="já registrado"):
         reg.register("energia", 2)
@@ -43,10 +42,9 @@ def test_registry_rejects_duplicates_and_suggests_names():
         reg.get("enrgia")
 
 
-def test_builtin_plugins_are_discovered():
-    assert {"mcf", "cf", "cf_pmi", "gen"} <= set(EVALUATIONS.names())
+def test_builtin_evaluations_and_benchmarks_are_registered():
+    assert set(EVALUATIONS.names()) == {"mcf", "cf", "gen", "ifeval"}
     assert "energy_regulacao" in BENCHMARKS.names()
-    assert BENCHMARKS.origin("energy_regulacao") == "pt-lm-eval"
 
 
 # --- dados ----------------------------------------------------------------------
@@ -74,7 +72,6 @@ def test_select_shots_is_deterministic_and_excludes_self():
     shots = select_shots(pool[0], pool, 3, seed=1)
     assert shots == select_shots(pool[0], pool, 3, seed=1)
     assert pool[0] not in shots and len(shots) == 3
-    assert select_shots(pool[0], pool, 2, strategy="first_n") == pool[1:3]
 
 
 # --- tokenização e logprobs -------------------------------------------------------
@@ -94,13 +91,13 @@ def test_continuation_logprob_checks_token_alignment():
         {"11": {"logprob": -1.0, "rank": 1}},
         {"12": {"logprob": -2.0, "rank": 3}, "7": {"logprob": -0.5, "rank": 1}},
     ]
-    r = _continuation_logprob(prompt_logprobs, ids, start=1)
+    r = continuation_logprob(prompt_logprobs, ids, start=1)
     assert (r.logprob, r.is_greedy, r.n_tokens) == (-3.0, False, 2)
     # Empate exato com o mais provável conta como guloso, mesmo com rank 2.
     tie = [None, {"11": {"logprob": -1.0, "rank": 2}, "5": {"logprob": -1.0, "rank": 1}}]
-    assert _continuation_logprob(tie, [10, 11], start=1).is_greedy
+    assert continuation_logprob(tie, [10, 11], start=1).is_greedy
     with pytest.raises(KeyError):  # servidor tokenizou diferente: falha alta, nunca silenciosa
-        _continuation_logprob(prompt_logprobs, [10, 99, 12], start=1)
+        continuation_logprob(prompt_logprobs, [10, 99, 12], start=1)
 
 
 # --- métricas -------------------------------------------------------------------
@@ -108,15 +105,6 @@ def test_continuation_logprob_checks_token_alignment():
 
 def test_argmax_ties_pick_first():
     assert argmax([1.0, 3.0, 3.0]) == 1
-
-
-def test_choice_accuracy_normalizations():
-    # Opção 0 tem logprob total maior, mas é longa: perde nas versões normalizadas.
-    responses = [LoglikelihoodResponse(-6.0, False, 6), LoglikelihoodResponse(-4.0, False, 1)]
-    texts = ["uma opção bem comprida", "x"]
-    unconditional = [LoglikelihoodResponse(-1.0, False, 6), LoglikelihoodResponse(-10.0, False, 1)]
-    got = choice_accuracy(responses, gold=0, choice_texts=texts, unconditional=unconditional)
-    assert got == {"acc": 0.0, "acc_char": 1.0, "acc_token": 1.0, "acc_pmi": 0.0}
 
 
 def test_mean_stderr_matches_formula():
@@ -171,9 +159,6 @@ def test_stop_sequences_only_without_chat(monkeypatch):
     """Em chat, stops cortariam o raciocínio quando o modelo cita o enunciado."""
     import asyncio
 
-    from pt_lm_eval.backends.openai_compat import OpenAICompatBackend, OpenAICompatSettings
-    from pt_lm_eval.core.types import GenerateRequest
-
     sent = {}
 
     async def fake_post(self, path, payload):
@@ -182,10 +167,10 @@ def test_stop_sequences_only_without_chat(monkeypatch):
         body = {"content": "Resposta: A"} if key == "message" else "Resposta: A"
         return {"choices": [{key: body, "finish_reason": "stop"}]}
 
-    monkeypatch.setattr(OpenAICompatBackend, "_post", fake_post)
+    monkeypatch.setattr(Client, "_post", fake_post)
     request = GenerateRequest(prompt="Pergunta: ?", stop=("\n\nPergunta:",))
     for chat in (True, False):
-        backend = OpenAICompatBackend(OpenAICompatSettings(model="m", base_url="http://x/v1", chat=chat))
+        backend = Client(model="m", base_url="http://x/v1", chat=chat)
         (response,) = asyncio.run(backend.generate([request]))
         assert response.text == "Resposta: A"
     assert "stop" not in sent["/chat/completions"]
@@ -194,9 +179,6 @@ def test_stop_sequences_only_without_chat(monkeypatch):
 
 def test_thinking_flag_names_the_run_and_reaches_the_chat_template(monkeypatch):
     import asyncio
-
-    from pt_lm_eval.backends.openai_compat import OpenAICompatBackend, OpenAICompatFactory
-    from pt_lm_eval.core.types import GenerateRequest
 
     base = {"experiment": "x", "benchmarks": ["energy_regulacao"]}
     on, off = parse_config(
@@ -227,17 +209,15 @@ def test_thinking_flag_names_the_run_and_reaches_the_chat_template(monkeypatch):
         sent.append(payload)
         return {"choices": [{"message": {"content": "Resposta: A"}, "finish_reason": "stop"}]}
 
-    monkeypatch.setattr(OpenAICompatBackend, "_post", fake_post)
+    monkeypatch.setattr(Client, "_post", fake_post)
     for model in (on, off):
-        backend = OpenAICompatFactory().create(model, "http://x/v1", None)
+        backend = Client.for_model(model, "http://x/v1", None)
         asyncio.run(backend.generate([GenerateRequest(prompt="?")]))
     assert sent[0]["chat_template_kwargs"] == {"enable_thinking": True}
     assert sent[1]["chat_template_kwargs"] == {"x": 1, "enable_thinking": False}
 
 
 def test_fewshot_as_multiturn_applies_only_to_chat_generation_with_shots():
-    from pt_lm_eval.runner.plan import build_plan
-
     cfg = parse_config(
         {
             "experiment": "x",
@@ -250,13 +230,11 @@ def test_fewshot_as_multiturn_applies_only_to_chat_generation_with_shots():
             ],
         }
     )
-    multiturn = {(s.model.name, s.benchmark, s.evaluation) for s in build_plan(cfg) if s.fewshot_as_multiturn}
+    multiturn = {(s.model.name, s.benchmark, s.evaluation) for s in cfg.plan() if s.fewshot_as_multiturn}
     assert multiturn == {("i", "energy_regulacao", "gen")}
 
 
 def test_fingerprint_ignores_fields_left_at_default():
-    from pt_lm_eval.runner.execute import _non_default
-
     cfg = parse_config(
         {
             "experiment": "x",
@@ -264,7 +242,7 @@ def test_fingerprint_ignores_fields_left_at_default():
             "benchmarks": ["energy_regulacao"],
         }
     )
-    assert _non_default(cfg.models[0]) == {"name": "m", "type": "base"}
+    assert non_default(cfg.models[0]) == {"name": "m", "type": "base"}
 
 
 # --- teste de sanidade e servidor ------------------------------------------------------
@@ -275,20 +253,14 @@ class _FakeBackend:
         self.logprob, self.text, self.error = logprob, text, error
 
     async def loglikelihood(self, requests):
-        from pt_lm_eval.core.types import LoglikelihoodResponse
-
         return [LoglikelihoodResponse(self.logprob, True, 2) for _ in requests]
 
     async def generate(self, requests):
-        from pt_lm_eval.core.types import GenerateResponse
-
         return [GenerateResponse(self.text, error=self.error) for _ in requests]
 
 
 def test_smoke_test_checks_each_request_kind_used():
     import asyncio
-
-    from pt_lm_eval.runner.smoke import SmokeTestError, smoke_test
 
     asyncio.run(smoke_test(_FakeBackend(), {"loglikelihood", "generate"}))
     with pytest.raises(SmokeTestError, match="geração falhou"):
@@ -303,8 +275,6 @@ def test_smoke_test_checks_each_request_kind_used():
 def test_vllm_server_refuses_a_busy_port(tmp_path):
     import socket
 
-    from pt_lm_eval.servers.vllm import ServerError, vllm_server
-
     with socket.socket() as busy:
         busy.bind(("127.0.0.1", 0))
         busy.listen()
@@ -317,8 +287,7 @@ def test_vllm_server_refuses_a_busy_port(tmp_path):
 def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
     from contextlib import contextmanager
 
-    from pt_lm_eval.runner import execute
-    from pt_lm_eval.servers.vllm import ServerError
+    from pt_lm_eval import run
 
     cfg = parse_config(
         {
@@ -326,7 +295,6 @@ def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
             "output_dir": str(tmp_path),
             "models": [{"name": "quebrado", "type": "base"}, {"name": "ok", "type": "base"}],
             "benchmarks": [{"name": "energy_regulacao", "evaluations": ["mcf"]}],
-            "reporters": [],
         }
     )
     ran = []
@@ -337,13 +305,13 @@ def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
             raise ServerError("vLLM terminou antes de ficar pronto")
         yield "http://x/v1"
 
-    async def fake_run_model(steps, backend, cfg):
+    async def fake_run_model(self, steps, client):
         ran.append(steps[0].model.name)
 
-    monkeypatch.setattr(execute, "model_endpoint", fake_endpoint)
-    monkeypatch.setattr(execute, "_run_model", fake_run_model)
+    monkeypatch.setattr(run, "model_endpoint", fake_endpoint)
+    monkeypatch.setattr(Experiment, "_run_model", fake_run_model)
     with pytest.raises(RuntimeError, match=r"modelos pulados: \['quebrado'\]"):
-        execute.run_experiment(cfg)
+        Experiment(cfg).run()
     assert ran == ["ok"]
 
 
@@ -400,11 +368,10 @@ def _memory_benchmark() -> str:
 
 
 def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
-    from pt_lm_eval.runner import lengths
-    from pt_lm_eval.runner.plan import build_plan
+    from pt_lm_eval import run
 
     _memory_benchmark()
-    monkeypatch.setattr(lengths, "_tokenizer", lambda name: _WordTokenizer())
+    monkeypatch.setattr(run, "_tokenizer", lambda name: _WordTokenizer())
     cfg = parse_config(
         {
             "experiment": "x",
@@ -417,12 +384,12 @@ def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
             ],
         }
     )
-    checks = {(c.step.model.name, c.step.evaluation): c for c in lengths.check_lengths(build_plan(cfg), cfg)}
+    checks = {(c.step.model.name, c.step.evaluation): c for c in Experiment(cfg).check_lengths()}
     gen = checks[("i", "gen")]
-    assert (gen.n_items, gen.over, gen.limit) == (2, 1, 60) and not gen.ok  # só a pergunta longa estoura
+    assert (gen.items, gen.over, gen.limit) == (2, 1, 60) and not gen.ok  # só a pergunta longa estoura
     assert checks[("b", "mcf")].over == 0 and checks[("b", "mcf")].ok
     assert checks[("g", "gen")].note == "API: sem tokenizer local" and checks[("g", "gen")].ok
-    assert "1 itens não cabem" in lengths.format_lengths(list(checks.values()))
+    assert "1 itens não cabem" in gen.row()[-1]
 
 
 def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path):
@@ -430,9 +397,7 @@ def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path
     import json
     from types import SimpleNamespace
 
-    from pt_lm_eval.report.csv_reporter import CSVReporter
-    from pt_lm_eval.runner import execute
-    from pt_lm_eval.runner.plan import build_plan
+    from pt_lm_eval import run
 
     _memory_benchmark()
     cfg = parse_config(
@@ -443,23 +408,22 @@ def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path
             "models": [{"name": "m", "type": "instruct"}],
         }
     )
-    (step,) = build_plan(cfg)
+    (step,) = cfg.plan()
     clock = iter([100.0, 104.0, 200.0, 201.5])
-    # Só a referência de execute: o event loop do asyncio também usa time.monotonic.
-    monkeypatch.setattr(execute, "time", SimpleNamespace(monotonic=lambda: next(clock)))
-    result = asyncio.run(execute.run_step(step, _FakeBackend(text="Resposta: A"), cfg))
+    # Só a referência de run: o event loop do asyncio também usa time.monotonic.
+    monkeypatch.setattr(run, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    experiment = Experiment(cfg)
+    result = asyncio.run(experiment.run_step(step, _FakeBackend(text="Resposta: A")))
     assert result["timing"] == {"seconds": 4.0, "items_run": 2, "items_resumed": 0}
     # Retomada com a mesma configuração e nada a fazer: soma o tempo anterior.
-    result = asyncio.run(execute.run_step(step, _FakeBackend(text="Resposta: A"), cfg))
+    result = asyncio.run(experiment.run_step(step, _FakeBackend(text="Resposta: A")))
     assert result["timing"] == {"seconds": 5.5, "items_run": 0, "items_resumed": 2}
-    path = CSVReporter().write(execute.collect_results(cfg.out_dir), cfg.out_dir, "t")
+    path = write_csv(collect_results(cfg.out_dir), cfg.out_dir / "t.csv")
     assert "_contexto_teste@1|gen|duration_seconds" in path.read_text().splitlines()[0]
     assert json.loads(next(cfg.out_dir.glob("*/*.results.json")).read_text())["evaluation"]["fingerprint"]
 
 
 def test_benchmark_parameters_override_the_general_ones():
-    from pt_lm_eval.runner.plan import build_plan
-
     general = {"experiment": "x", "limit": 100, "num_fewshot": 3, "models": [{"name": "m", "type": "base"}]}
     cfg = parse_config(
         {
@@ -471,15 +435,13 @@ def test_benchmark_parameters_override_the_general_ones():
             ],
         }
     )
-    got = {s.benchmark: (s.limit, s.num_fewshot) for s in build_plan(cfg) if not s.skip_reason}
+    got = {s.benchmark: (s.limit, s.num_fewshot) for s in cfg.plan() if not s.skip_reason}
     assert got == {"energy_regulacao": (100, 3), "mmmlu_pt_br": (None, 0)}
     with pytest.raises(ValueError, match="'all'"):
         parse_config({**general, "benchmarks": [{"name": "ifeval_pt", "limit": "tudo"}]})
 
 
 def test_evaluations_follow_the_model_type():
-    from pt_lm_eval.runner.plan import build_plan
-
     cfg = parse_config(
         {
             "experiment": "x",
@@ -496,7 +458,7 @@ def test_evaluations_follow_the_model_type():
         }
     )
     plan = {}
-    for s in build_plan(cfg):
+    for s in cfg.plan():
         plan.setdefault(s.model.name, []).append(s.skip_reason or f"{s.benchmark}/{s.evaluation}")
     assert plan["b"] == [
         "energy_regulacao/mcf",
@@ -510,8 +472,6 @@ def test_evaluations_follow_the_model_type():
 
 def test_answer_letter_is_never_mistaken_for_option_text():
     """MMLU formal_logic: opções "A", "~A", "B", "~B" com gabarito "B" (a segunda)."""
-    from pt_lm_eval.data.columns import answer_index
-
     options = ["A", "~A", "B", "~B"]
     assert answer_index("B", options, "letter") == 1
     assert answer_index("~B", options, "text") == 3

@@ -7,10 +7,9 @@ import math
 import pytest
 
 from pt_lm_eval import EVALUATIONS, InstructionItem
-from pt_lm_eval.core.types import GenerateResponse
-from pt_lm_eval.metrics.instruction_following import CHECKERS, follows_loose, follows_strict
-from pt_lm_eval.metrics.stats import mean_stderr, weighted_mean_stderr
-from pt_lm_eval.report.results import aggregate
+from pt_lm_eval.core import GenerateResponse
+from pt_lm_eval.ifeval import CHECKERS, follows_loose, follows_strict
+from pt_lm_eval.report import aggregate, mean_stderr, weighted_mean_stderr
 
 
 def ok(instruction: str, text: str, **kw) -> bool:
