@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from pt_lm_eval import EVALUATIONS, MCQItem
-from pt_lm_eval.client import split_reasoning
 from pt_lm_eval.core import GenerateResponse, LoglikelihoodResponse
-from pt_lm_eval.mcq import extract_letter
+from pt_lm_eval.evaluations.multiple_choice import extract_letter
+from pt_lm_eval.inference.client import split_reasoning
 
 ITEM = MCQItem(id="q1", question="Quanto é 2 + 2?", options=("3", "4", "5"), gold=1)
 SHOT = MCQItem(id="s1", question="Quanto é 1 + 1?", options=("2", "3", "4"), gold=0)

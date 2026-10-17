@@ -1,22 +1,23 @@
 """pt-lm-eval: avaliador de LLMs em português.
 
-Importar o pacote registra as avaliações (mcq, ifeval) e os benchmarks.
+Importar o pacote registra as avaliações (evaluations/) e os benchmarks (benchmarks/).
 """
 
-from . import benchmarks, ifeval, mcq  # noqa: F401  (registram o que definem)
-from .core import BENCHMARKS, EVALUATIONS, LETTERS, Benchmark, InstructionItem, Item, MCQItem, Scored
-from .data import HFDataset, columns, letter_index
+from .benchmarks import BENCHMARKS, Benchmark, ColumnBenchmark, Columns, HFDataset
+from .core import LETTERS, InstructionItem, Item, MCQItem, Scored
+from .evaluations import EVALUATIONS, Evaluation
 
 __all__ = [
     "BENCHMARKS",
     "EVALUATIONS",
     "LETTERS",
     "Benchmark",
+    "ColumnBenchmark",
+    "Columns",
+    "Evaluation",
     "HFDataset",
     "InstructionItem",
     "Item",
     "MCQItem",
     "Scored",
-    "columns",
-    "letter_index",
 ]

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from pt_lm_eval.ifeval import follows_loose, follows_strict
+from pt_lm_eval.evaluations.ifeval import follows_loose, follows_strict
 
 pytestmark = pytest.mark.parity
 

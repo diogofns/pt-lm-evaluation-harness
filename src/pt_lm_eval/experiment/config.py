@@ -15,7 +15,9 @@ from typing import Any
 
 import yaml
 
-from .core import BENCHMARKS, EVALUATIONS, Item, Request
+from ..benchmarks import BENCHMARKS
+from ..core import Item, Request
+from ..evaluations import EVALUATIONS
 
 MODEL_TYPES = ("base", "instruct", "api")
 SCENARIO = {"base": {"loglikelihood"}, "instruct": {"generate"}, "api": {"generate"}}
@@ -110,10 +112,7 @@ class Step:
         return EVALUATIONS.get(self.evaluation).needs
 
     def build(self, item: Item, shots: list[Item]) -> list[Request]:
-        evaluation = EVALUATIONS.get(self.evaluation)
-        if self.fewshot_as_multiturn:
-            return evaluation.build(item, shots, multiturn=True)  # type: ignore[call-arg]
-        return evaluation.build(item, shots)
+        return EVALUATIONS.get(self.evaluation).build(item, shots, multiturn=self.fewshot_as_multiturn)
 
 
 @dataclass(frozen=True)
@@ -168,7 +167,7 @@ class ExperimentConfig:
         ev = EVALUATIONS.get(evaluation)
         if not (wanted and model.uses_chat and ev.needs == {"generate"}):
             return False
-        if not getattr(ev, "supports_multiturn", False):
+        if not ev.supports_multiturn:
             raise ValueError(f"{run.name}: a avaliação {evaluation} não suporta fewshot_as_multiturn")
         return shots > 0
 

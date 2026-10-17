@@ -13,7 +13,7 @@ alternativas, organizadas por área. Quatro benchmarks:
 ## Fonte
 
 Datasets da organização [`mmlu-pt`](https://huggingface.co/mmlu-pt) no Hugging Face;
-revisões fixadas em `benchmarks.py`. Cada split é uma área (ex.: `law`, `stem`) e vira
+revisões fixadas em `benchmark.py`. Cada split é uma área (ex.: `law`, `stem`) e vira
 a matéria do item. As colunas `exam`, `exam_edition` e `exam_url` identificam a prova
 de origem de cada questão.
 

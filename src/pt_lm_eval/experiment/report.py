@@ -18,11 +18,12 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .core import Request
+from ..core import Request
+from ..inference.server import slug
 
 if TYPE_CHECKING:
+    from ..benchmarks import Benchmark
     from .config import ExperimentConfig, Step
-    from .core import Benchmark
 
 SCHEMA = "pt-lm-eval/results@1"
 
@@ -176,34 +177,47 @@ def build_result(
     }
 
 
-def write_result(result: dict[str, Any], path: Path) -> None:
-    path.write_text(json.dumps(_clean(result), ensure_ascii=False, indent=2, default=str) + "\n")
+class Results:
+    """Os arquivos de um experimento: por passo, `*.samples.jsonl` e `*.results.json`; no
+    fim, o CSV consolidado, reconstruído de todos os resultados."""
 
+    def __init__(self, out_dir: Path) -> None:
+        self.out_dir = Path(out_dir)
 
-def collect_results(out_dir: Path) -> list[dict]:
-    return [json.loads(p.read_text()) for p in sorted(out_dir.glob("*/*.results.json"))]
+    def paths(self, step: Step) -> tuple[Path, Path]:
+        """(amostras, resultado) do passo, em <out_dir>/<modelo>/<benchmark>.<avaliação>.*"""
+        stem = self.out_dir / slug(step.model.display_name) / f"{slug(step.benchmark)}.{step.evaluation}"
+        stem.parent.mkdir(parents=True, exist_ok=True)
+        return Path(f"{stem}.samples.jsonl"), Path(f"{stem}.results.json")
 
+    @staticmethod
+    def write(result: dict[str, Any], path: Path) -> None:
+        path.write_text(json.dumps(_clean(result), ensure_ascii=False, indent=2, default=str) + "\n")
 
-def write_csv(results: list[dict[str, Any]], path: Path) -> Path:
-    """Uma linha por modelo, uma coluna por benchmark@versão|avaliação|métrica (mais o tempo
-    em `duration_seconds`); versões diferentes de um benchmark nunca dividem coluna."""
-    rows: dict[str, dict[str, Any]] = {}
-    columns: dict[str, None] = {}
-    for r in results:
-        model = r["model"].get("display_name") or r["model"]["name"]
-        prefix = f"{r['benchmark']['name']}@{r['benchmark']['version']}|{r['evaluation']['name']}"
-        values = dict(r["metrics"])
-        if (r.get("timing") or {}).get("seconds") is not None:
-            values["duration_seconds"] = r["timing"]["seconds"]
-        row = rows.setdefault(model, {"model": model})
-        for metric, value in values.items():
-            columns[f"{prefix}|{metric}"] = None
-            row[f"{prefix}|{metric}"] = "" if value is None or math.isnan(value) else round(value, 6)
-    with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["model", *sorted(columns)])
-        writer.writeheader()
-        writer.writerows(rows.values())
-    return path
+    def collect(self) -> list[dict]:
+        return [json.loads(p.read_text()) for p in sorted(self.out_dir.glob("*/*.results.json"))]
+
+    def write_csv(self, name: str) -> Path:
+        """Uma linha por modelo, uma coluna por benchmark@versão|avaliação|métrica (mais o tempo
+        em `duration_seconds`); versões diferentes de um benchmark nunca dividem coluna."""
+        rows: dict[str, dict[str, Any]] = {}
+        columns: dict[str, None] = {}
+        for r in self.collect():
+            model = r["model"].get("display_name") or r["model"]["name"]
+            prefix = f"{r['benchmark']['name']}@{r['benchmark']['version']}|{r['evaluation']['name']}"
+            values = dict(r["metrics"])
+            if (r.get("timing") or {}).get("seconds") is not None:
+                values["duration_seconds"] = r["timing"]["seconds"]
+            row = rows.setdefault(model, {"model": model})
+            for metric, value in values.items():
+                columns[f"{prefix}|{metric}"] = None
+                row[f"{prefix}|{metric}"] = "" if value is None or math.isnan(value) else round(value, 6)
+        path = self.out_dir / f"{name}.csv"
+        with path.open("w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=["model", *sorted(columns)])
+            writer.writeheader()
+            writer.writerows(rows.values())
+        return path
 
 
 def package_version() -> str:

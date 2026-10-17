@@ -28,12 +28,9 @@ jobs:
         with:
           filters: |
             benchmarks:
-              - 'src/pt_lm_eval/benchmarks.py'
-              - 'src/pt_lm_eval/cards/**'
-              - 'src/pt_lm_eval/core.py'
-              - 'src/pt_lm_eval/data.py'
-              - 'src/pt_lm_eval/mcq.py'
-              - 'src/pt_lm_eval/ifeval.py'
+              - 'src/pt_lm_eval/benchmarks/**'
+              - 'src/pt_lm_eval/core/**'
+              - 'src/pt_lm_eval/evaluations/**'
               - 'benchmarks.lock.json'
       - uses: astral-sh/setup-uv@v5
         if: steps.mudou.outputs.benchmarks == 'true'

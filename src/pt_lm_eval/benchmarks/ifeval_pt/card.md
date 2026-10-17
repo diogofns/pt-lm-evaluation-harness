@@ -16,7 +16,7 @@ instrução, como no IFEval.
 ## Licença
 
 Apache-2.0 (dataset e código de referência). Os verificadores em
-`ifeval.py` são portados do repositório de referência,
+`evaluations/ifeval/instructions.py` são portados do repositório de referência,
 com o aviso de copyright original.
 
 ## Variedade do português

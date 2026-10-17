@@ -6,15 +6,16 @@ import math
 
 import pytest
 
-from pt_lm_eval import BENCHMARKS, EVALUATIONS, MCQItem, columns, letter_index
-from pt_lm_eval.client import Client, continuation_logprob, truncate_left
-from pt_lm_eval.config import parse_config
-from pt_lm_eval.core import GenerateRequest, GenerateResponse, LoglikelihoodResponse, Registry
-from pt_lm_eval.data import answer_index, non_default, select_shots
-from pt_lm_eval.mcq import argmax
-from pt_lm_eval.report import aggregate, collect_results, macro_mean_stderr, mean_stderr, write_csv
-from pt_lm_eval.run import Experiment, SmokeTestError, smoke_test
-from pt_lm_eval.server import ServerError, vllm_server
+from pt_lm_eval import BENCHMARKS, EVALUATIONS, Benchmark, ColumnBenchmark, Columns, MCQItem
+from pt_lm_eval.benchmarks.base import Loaded, answer_index, letter_index
+from pt_lm_eval.core import GenerateRequest, GenerateResponse, LoglikelihoodResponse, Registry, non_default
+from pt_lm_eval.evaluations.multiple_choice import argmax
+from pt_lm_eval.experiment import lengths, runner
+from pt_lm_eval.experiment.config import parse_config
+from pt_lm_eval.experiment.report import Results, aggregate, macro_mean_stderr, mean_stderr
+from pt_lm_eval.experiment.runner import Experiment, SmokeTestError, smoke_test
+from pt_lm_eval.inference.client import Client, continuation_logprob, truncate_left
+from pt_lm_eval.inference.server import LocalVLLM, ServerError
 
 ITEM = MCQItem(id="q1", question="Quanto é 2 + 2?", options=("3", "4", "5"), gold=1, subject="mat")
 
@@ -57,20 +58,29 @@ def test_letter_index(value, expected):
 
 def test_columns_accepts_letter_index_or_text():
     row = {"_split": "test", "_index": 7, "q": "?", "opts": {"text": ["x", "y"]}, "a": "y"}
-    to_item = columns(question="q", options="opts.text", answer="a")
+    to_item = Columns(question="q", options="opts.text", answer="a").to_item
     item = to_item(row)
     assert (item.id, item.gold, item.options) == ("test-7", 1, ("x", "y"))
     assert to_item({**row, "a": 0}).gold == 0
     assert to_item({**row, "a": "B"}).gold == 1
-    with_subject = columns(question="q", options="opts.text", answer="a", subject="s")
+    with_subject = Columns(question="q", options="opts.text", answer="a", subject="s").to_item
     assert with_subject({**row, "s": None}).subject is None  # nulo não vira a string "None"
     assert with_subject({**row, "s": " direito "}).subject == "direito"
 
 
+class _Unregistered(Benchmark):
+    """Benchmark de teste sem `name`: não se registra; os dados são postos à mão."""
+
+    def to_item(self, row):
+        return None
+
+
 def test_select_shots_is_deterministic_and_excludes_self():
     pool = [MCQItem(id=f"p{i}", question="?", options=("a", "b"), gold=0) for i in range(20)]
-    shots = select_shots(pool[0], pool, 3, seed=1)
-    assert shots == select_shots(pool[0], pool, 3, seed=1)
+    bench = _Unregistered()
+    bench.data = Loaded(pool, pool, 0)
+    shots = bench.select_shots(pool[0], 3, seed=1)
+    assert shots == bench.select_shots(pool[0], 3, seed=1)
     assert pool[0] not in shots and len(shots) == 3
 
 
@@ -137,10 +147,13 @@ def test_acc_norm_follows_the_benchmark_normalization_for_every_model():
 
 
 def test_benchmark_rejects_unknown_cf_normalization():
-    from pt_lm_eval import Benchmark
-
     with pytest.raises(ValueError, match="cf_normalization"):
-        Benchmark(version="1", source=None, to_item=None, evaluations=("cf",), cf_normalization="pmi")
+
+        class _Bad(ColumnBenchmark):
+            name = "_normalizacao_invalida"
+            version = "1"
+            columns = Columns(question="q", options="o", answer="a")
+            cf_normalization = "pmi"
 
 
 # --- configuração -------------------------------------------------------------------
@@ -280,14 +293,12 @@ def test_vllm_server_refuses_a_busy_port(tmp_path):
         busy.listen()
         port = busy.getsockname()[1]
         with pytest.raises(ServerError, match="já está em uso"):
-            with vllm_server("m", args={}, log_path=tmp_path / "x.log", port=port, executable="false"):
+            with LocalVLLM("m", args={}, log_path=tmp_path / "x.log", port=port, executable="false"):
                 pass
 
 
 def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
     from contextlib import contextmanager
-
-    from pt_lm_eval import run
 
     cfg = parse_config(
         {
@@ -308,7 +319,7 @@ def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
     async def fake_run_model(self, steps, client):
         ran.append(steps[0].model.name)
 
-    monkeypatch.setattr(run, "model_endpoint", fake_endpoint)
+    monkeypatch.setattr(runner.Endpoint, "for_model", staticmethod(fake_endpoint))
     monkeypatch.setattr(Experiment, "_run_model", fake_run_model)
     with pytest.raises(RuntimeError, match=r"modelos pulados: \['quebrado'\]"):
         Experiment(cfg).run()
@@ -348,30 +359,25 @@ class _MemorySource:
 
 def _memory_benchmark() -> str:
     """Benchmark em memória, com uma pergunta curta e uma longa (registrado uma vez)."""
-    from pt_lm_eval import Benchmark, columns
-
     if "_contexto_teste" not in BENCHMARKS.names():
         rows = [
             {"q": "curta?", "o": ["a", "b"], "a": 0},
             {"q": " ".join(["longa"] * 40) + "?", "o": ["a", "b"], "a": 1},
         ]
-        BENCHMARKS.register(
-            "_contexto_teste",
-            Benchmark(
-                version="1",
-                source=_MemorySource(rows),
-                to_item=columns(question="q", options="o", answer="a"),
-                evaluations=("mcf", "gen"),
-            ),
-        )
+
+        class _ContextoTeste(ColumnBenchmark):
+            name = "_contexto_teste"
+            version = "1"
+            source = _MemorySource(rows)
+            evaluations = ("mcf", "gen")
+            columns = Columns(question="q", options="o", answer="a")
+
     return "_contexto_teste"
 
 
 def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
-    from pt_lm_eval import run
-
     _memory_benchmark()
-    monkeypatch.setattr(run, "_tokenizer", lambda name: _WordTokenizer())
+    monkeypatch.setattr(lengths, "_tokenizer", lambda name: _WordTokenizer())
     cfg = parse_config(
         {
             "experiment": "x",
@@ -397,8 +403,6 @@ def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path
     import json
     from types import SimpleNamespace
 
-    from pt_lm_eval import run
-
     _memory_benchmark()
     cfg = parse_config(
         {
@@ -410,15 +414,15 @@ def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path
     )
     (step,) = cfg.plan()
     clock = iter([100.0, 104.0, 200.0, 201.5])
-    # Só a referência de run: o event loop do asyncio também usa time.monotonic.
-    monkeypatch.setattr(run, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    # Só a referência do runner: o event loop do asyncio também usa time.monotonic.
+    monkeypatch.setattr(runner, "time", SimpleNamespace(monotonic=lambda: next(clock)))
     experiment = Experiment(cfg)
     result = asyncio.run(experiment.run_step(step, _FakeBackend(text="Resposta: A")))
     assert result["timing"] == {"seconds": 4.0, "items_run": 2, "items_resumed": 0}
     # Retomada com a mesma configuração e nada a fazer: soma o tempo anterior.
     result = asyncio.run(experiment.run_step(step, _FakeBackend(text="Resposta: A")))
     assert result["timing"] == {"seconds": 5.5, "items_run": 0, "items_resumed": 2}
-    path = write_csv(collect_results(cfg.out_dir), cfg.out_dir / "t.csv")
+    path = Results(cfg.out_dir).write_csv("t")
     assert "_contexto_teste@1|gen|duration_seconds" in path.read_text().splitlines()[0]
     assert json.loads(next(cfg.out_dir.glob("*/*.results.json")).read_text())["evaluation"]["fingerprint"]
 
@@ -480,5 +484,5 @@ def test_answer_letter_is_never_mistaken_for_option_text():
         answer_index("B", options)  # auto: letra e texto discordam
     assert answer_index("D", options) == 3  # auto sem conflito segue funcionando
     row = {"_split": "test", "_index": 0, "q": "?", "a": "A", "b": "~A", "c": "B", "d": "~B", "gold": "B"}
-    to_item = columns(question="q", options=["a", "b", "c", "d"], answer="gold", answer_is="letter")
-    assert to_item(row).gold == 1
+    columns = Columns(question="q", options=["a", "b", "c", "d"], answer="gold", answer_is="letter")
+    assert columns.to_item(row).gold == 1

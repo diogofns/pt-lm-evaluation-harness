@@ -8,8 +8,8 @@ import pytest
 
 from pt_lm_eval import EVALUATIONS, InstructionItem
 from pt_lm_eval.core import GenerateResponse
-from pt_lm_eval.ifeval import CHECKERS, follows_loose, follows_strict
-from pt_lm_eval.report import aggregate, mean_stderr, weighted_mean_stderr
+from pt_lm_eval.evaluations.ifeval import INSTRUCTIONS, follows_loose, follows_strict
+from pt_lm_eval.experiment.report import aggregate, mean_stderr, weighted_mean_stderr
 
 
 def ok(instruction: str, text: str, **kw) -> bool:
@@ -28,7 +28,7 @@ def test_registry_covers_every_instruction_in_the_dataset():
     length_constraints:number_paragraphs length_constraints:number_sentences length_constraints:number_words
     punctuation:crase_presence punctuation:no_comma punctuation:no_tilde
     startend:end_checker startend:quotation"""
-    assert {f"pt:{i}" for i in used.split()} <= set(CHECKERS)
+    assert {f"pt:{i}" for i in used.split()} <= set(INSTRUCTIONS)
 
 
 @pytest.mark.parametrize(

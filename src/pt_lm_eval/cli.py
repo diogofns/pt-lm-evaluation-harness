@@ -1,6 +1,6 @@
 """Linha de comando: `pt-lm-eval run` e `pt-lm-eval benchmarks list|preview|check`.
 
-O `check` carrega todos os itens, monta todos os prompts, confere o cartão (cards/) e
+O `check` carrega todos os itens, monta todos os prompts, confere o cartão (card.md) e
 compara o hash dos prompts com a trava (`benchmarks.lock.json`): se o prompt de um
 benchmark mudar, a versão dele precisa mudar também, para resultados de prompts
 diferentes nunca se misturarem.
@@ -16,13 +16,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from .config import load_config
-from .core import BENCHMARKS, EVALUATIONS
-from .data import load_items, prompt_signature, select_shots
-from .report import describe_requests
-from .run import Experiment
+from .benchmarks import BENCHMARKS
+from .evaluations import EVALUATIONS
+from .experiment import Experiment, load_config
+from .experiment.report import describe_requests
 
-CARDS_DIR = Path(__file__).with_name("cards")
 CARD_SECTIONS = (
     "Fonte",
     "Licença",
@@ -86,12 +84,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def show_prompts(name: str, evaluation: str | None = None, n: int = 2, num_fewshot: int = 0) -> None:
-    bench, loaded = BENCHMARKS.get(name), load_items(name)
+    bench = BENCHMARKS.get(name)
     for ev_name in [evaluation] if evaluation else bench.evaluations:
-        for item in loaded.items[:n]:
-            shots = select_shots(
-                item, loaded.pool, num_fewshot, seed=1234, exclude_self=bench.fewshot_source is None
-            )
+        for item in bench.data.items[:n]:
+            shots = bench.select_shots(item, num_fewshot, seed=1234)
             desc = describe_requests(EVALUATIONS.get(ev_name).build(item, shots))
             print(f"=== {name} · {ev_name} · item {item.id} · gold={getattr(item, 'gold', '?')}")
             print("\n---\n".join(desc["prompts"]) + "\n---")
@@ -117,7 +113,8 @@ def check_benchmarks(names: list[str], lock_path: Path, update_lock: bool = Fals
 
 
 def _check_one(name: str, lock: dict, update_lock: bool) -> bool:
-    bench, loaded = BENCHMARKS.get(name), load_items(name)
+    bench = BENCHMARKS.get(name)
+    loaded = bench.data
     items, pool = loaded.items, loaded.pool
     signatures = {}
     for ev_name in bench.evaluations:
@@ -128,9 +125,9 @@ def _check_one(name: str, lock: dict, update_lock: bool) -> bool:
                     f"{ev_name} espera {ev.item_type.__name__}; item {item.id} é {type(item).__name__}"
                 )
             ev.build(item, pool[:1])
-        signatures[ev_name] = prompt_signature(ev, items, pool)
+        signatures[ev_name] = bench.prompt_signature(ev)
 
-    problems = card_problems(CARDS_DIR / f"{bench.card or name}.md")
+    problems = card_problems(bench.card)
     key = f"{name}@{bench.version}"
     if update_lock:
         lock[key] = {"source": bench.source.describe(), "prompts": signatures}

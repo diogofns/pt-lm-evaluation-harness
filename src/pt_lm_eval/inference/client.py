@@ -17,10 +17,10 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from tqdm.asyncio import tqdm_asyncio
 
-from .core import GenerateRequest, GenerateResponse, LoglikelihoodRequest, LoglikelihoodResponse
+from ..core import GenerateRequest, GenerateResponse, LoglikelihoodRequest, LoglikelihoodResponse
 
 if TYPE_CHECKING:
-    from .config import ModelConfig
+    from ..experiment.config import ModelConfig
 
 DEFAULT_MAX_TOKENS = 1024
 LOGLIKELIHOOD_BATCH = 16  # prompts por requisição de log-likelihood

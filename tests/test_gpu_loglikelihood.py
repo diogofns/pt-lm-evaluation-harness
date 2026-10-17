@@ -12,8 +12,8 @@ import os
 
 import pytest
 
-from pt_lm_eval.client import Client
 from pt_lm_eval.core import LoglikelihoodRequest
+from pt_lm_eval.inference.client import Client
 
 pytestmark = pytest.mark.gpu
 

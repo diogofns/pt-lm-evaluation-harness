@@ -91,6 +91,18 @@ referência nos testes de paridade.
       checagem de contexto), `Step`, `Client`, `ExperimentConfig.plan()`; funções puras para
       prompts, métricas e verificadores
 
+### F7: orientação a objetos e organização (2026-10-17)
+
+- [x] Subpacotes por camada: `core/`, `benchmarks/`, `evaluations/`, `inference/`, `experiment/`
+- [x] Um benchmark por pasta (`benchmark.py` + `card.md`), cada um uma subclasse de
+      `Benchmark` (ou `ColumnBenchmark`), registrada ao ser definida e importada sozinha
+- [x] `Evaluation` abstrata; `LoglikelihoodMCQ` → `MultipleChoiceFormulation`, `ClozeFormulation`;
+      `GenerativeMCQ`; `InstructionFollowing`; os 31 verificadores do IFEval são classes
+      `Instruction`, como na referência
+- [x] `Endpoint` → `ExternalEndpoint`, `VLLMServer` → `LocalVLLM`, `DockerVLLM`; `Results`
+      para os arquivos do experimento; `TokenCounter` para a checagem de contexto
+- [x] Comportamento idêntico: trava de prompts intocada e paridades mantidas
+
 ## Problemas conhecidos dos datasets (fora do escopo)
 
 Não mexemos nos datasets; o foco é o framework avaliar corretamente. Registrados para

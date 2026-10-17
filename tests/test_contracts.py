@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from pt_lm_eval import BENCHMARKS, EVALUATIONS, InstructionItem, MCQItem
-from pt_lm_eval.cli import CARDS_DIR, card_problems, check_benchmarks
+from pt_lm_eval.cli import card_problems, check_benchmarks
 from pt_lm_eval.core import GenerateResponse, LoglikelihoodResponse
 
 # Um exemplo por tipo de item; cada avaliação é testada com o tipo que declara.
@@ -40,7 +40,7 @@ def test_evaluation_builds_declared_requests_and_scores_floats(name):
 def test_benchmark_declares_known_evaluations_and_a_complete_card(name):
     bench = BENCHMARKS.get(name)
     assert bench.version and set(bench.evaluations) <= set(EVALUATIONS.names())
-    assert not card_problems(CARDS_DIR / f"{bench.card or name}.md")
+    assert not card_problems(bench.card)
 
 
 @pytest.mark.network

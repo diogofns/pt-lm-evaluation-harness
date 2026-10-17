@@ -24,9 +24,9 @@ from pathlib import Path
 import pytest
 
 from pt_lm_eval import EVALUATIONS, MCQItem
-from pt_lm_eval.client import Client
 from pt_lm_eval.core import LoglikelihoodRequest, LoglikelihoodResponse
-from pt_lm_eval.mcq import argmax
+from pt_lm_eval.evaluations.multiple_choice import argmax
+from pt_lm_eval.inference.client import Client
 
 pytestmark = pytest.mark.parity
 
