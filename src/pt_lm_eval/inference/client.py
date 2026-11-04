@@ -161,7 +161,13 @@ class Client:
         if self._http is None:
             headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
             self._http = httpx.AsyncClient(
-                base_url=self.base_url.rstrip("/"), headers=headers, timeout=self.timeout
+                base_url=self.base_url.rstrip("/"),
+                headers=headers,
+                timeout=self.timeout,
+                # O pool HTTP deve acompanhar o limite configurado, inclusive acima de 100.
+                limits=httpx.Limits(
+                    max_connections=self.concurrency, max_keepalive_connections=self.concurrency
+                ),
             )
         last: Exception | None = None
         for attempt in range(self.max_retries):

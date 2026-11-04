@@ -1,0 +1,67 @@
+# Avaliação adicional em PT: revisões fixadas, zero-shot, MCF/CF sem chat.
+# Qwen3.5: apenas texto. Tucano2: contexto nativo de 4K; demais: 8K.
+experiment: cpt_multilingual_pt_full_b200
+output_dir: output
+seed: 1234
+num_fewshot: 0
+gpus:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+concurrency: 128
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 8192
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.8
+    generation_config: vllm
+    seed: 1234
+    trust_remote_code: true
+    mamba_ssm_cache_dtype: float32
+models:
+- name: /workspace/projects/icml/pt-qwen-kd/runs/pt-v1/exports/iter_0001000
+  type: base
+  label: qwen-pt-v1-step-1000
+  server_args:
+    language_model_only: true
+- name: /root/.cache/huggingface/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  type: base
+  label: qwen3.5-4b-original
+  server_args:
+    language_model_only: true
+- name: /workspace/projects/icml/pt-lm-evaluation-harness/.cache/huggingface/hub/models--Polygl0t--Tucano2-qwen-3.7B-Base/snapshots/1bebfaf643b56109e7fa441c203778680802abae
+  type: base
+  label: tucano2-qwen-3.7b-base
+  server_args:
+    max_model_len: 4096
+- name: /workspace/projects/icml/pt-lm-evaluation-harness/.cache/huggingface/hub/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539
+  type: base
+  label: qwen3-4b-base
+- name: /workspace/projects/icml/pt-nemotron-kd/runs/pt30-v1/exports/iter_0005000
+  type: base
+  label: pt30-v1-step-5000
+- name: /workspace/projects/portuguese_nemotron/checkpoints/NVIDIA-Nemotron-3-Nano-4B-BF16
+  type: base
+  label: nemotron-original
+benchmarks:
+- name: global_piqa_nonparallel_pt_br
+  evaluations:
+  - mcf
+  - cf
+- name: global_mmlu_pt
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_prox_pt
+  evaluations:
+  - mcf
+  - cf

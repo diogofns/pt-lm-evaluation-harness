@@ -49,12 +49,13 @@ class ModelConfig:
     system_prompt: str | None = None
     chat_template: bool | None = None  # None = sim para instruct e api, não para base
     thinking: bool | None = None  # liga/desliga o raciocínio (enable_thinking); None = padrão do modelo
-    concurrency: int | None = None
+    concurrency: int | None = None  # None = herda o experimento ou o padrão do cliente
     timeout: float = 600.0
     max_retries: int = 3
     label: str | None = None  # nome nos relatórios; padrão: name
 
     def __post_init__(self) -> None:
+        _validate_concurrency(self.concurrency, f"modelo {self.name}")
         if self.type not in MODEL_TYPES:
             raise ValueError(f"modelo {self.name}: type deve ser um de {MODEL_TYPES}")
         if self.type == "api" and not self.base_url:
@@ -89,6 +90,7 @@ class BenchmarkRun:
     num_fewshot: int | None = None
     fewshot_as_multiturn: bool | None = None
     limit: int | str | None = None  # None = o geral; "all" = todos os itens, mesmo com limit geral
+    exclude_ids: tuple[str, ...] = ()  # exclusões explícitas, iguais para todos os modelos
 
     def __post_init__(self) -> None:
         if isinstance(self.limit, str) and self.limit != "all":
@@ -106,6 +108,7 @@ class Step:
     limit: int | None
     skip_reason: str | None = None
     fewshot_as_multiturn: bool = False  # efetivo: só com chat, geração e ao menos um exemplo
+    exclude_ids: tuple[str, ...] = ()
 
     @property
     def needs(self) -> frozenset[str]:
@@ -126,6 +129,44 @@ class ExperimentConfig:
     limit: int | None = None  # itens por benchmark, sorteados com a seed
     num_fewshot: int = 0
     fewshot_as_multiturn: bool = False  # em chat: exemplos como turnos usuário/assistente
+
+    concurrency: int | None = None  # padrão global; None mantém 64 no vLLM e 8 em APIs
+    gpus: tuple[str, ...] | None = None  # fila: um modelo por GPU; None = execução sequencial
+
+    def __post_init__(self) -> None:
+        _validate_concurrency(self.concurrency, "experimento")
+        if self.gpus is not None:
+            object.__setattr__(self, "gpus", _gpu_ids(self.gpus))
+            self._validate_gpu_pool()
+        if self.concurrency is not None:
+            # Resolve antes de montar o plano: cliente, resultados e fingerprint usam
+            # o mesmo valor, independentemente de onde ele foi escrito no YAML.
+            object.__setattr__(
+                self,
+                "models",
+                tuple(
+                    dataclasses.replace(model, concurrency=self.concurrency)
+                    if model.concurrency is None
+                    else model
+                    for model in self.models
+                ),
+            )
+
+    def _validate_gpu_pool(self) -> None:
+        if self.server.mode not in {"local", "docker"}:
+            raise ValueError("gpus exige server.mode local ou docker")
+        assert self.gpus is not None
+        if type(self.server.port) is not int or not 1 <= self.server.port <= 65536 - len(self.gpus):
+            raise ValueError("server.port e as portas consecutivas das GPUs devem estar entre 1 e 65535")
+        for model in self.models:
+            if model.base_url:
+                raise ValueError("gpus exige modelos com vLLM gerenciado, sem base_url")
+            args = {key.replace("-", "_"): value for key, value in self.server.args_for(model).items()}
+            if "port" in args:
+                raise ValueError("com gpus, configure a porta inicial em server.port, não em args")
+            for key in ("tensor_parallel_size", "pipeline_parallel_size", "data_parallel_size"):
+                if args.get(key, 1) != 1:
+                    raise ValueError(f"modelo {model.name}: gpus aloca uma GPU por modelo; {key} deve ser 1")
 
     @property
     def out_dir(self) -> Path:
@@ -148,7 +189,15 @@ class ExperimentConfig:
                 for evaluation in evaluations:
                     multiturn = self._multiturn(run, model, evaluation, shots)
                     steps.append(
-                        Step(model, run.name, evaluation, shots, limit, fewshot_as_multiturn=multiturn)
+                        Step(
+                            model,
+                            run.name,
+                            evaluation,
+                            shots,
+                            limit,
+                            fewshot_as_multiturn=multiturn,
+                            exclude_ids=run.exclude_ids,
+                        )
                     )
         return steps
 
@@ -170,6 +219,33 @@ class ExperimentConfig:
         if not ev.supports_multiturn:
             raise ValueError(f"{run.name}: a avaliação {evaluation} não suporta fewshot_as_multiturn")
         return shots > 0
+
+
+def _gpu_ids(values: Any) -> tuple[str, ...]:
+    if not isinstance(values, (list, tuple)) or not values:
+        raise ValueError("gpus deve ser uma lista não vazia de índices ou UUIDs de GPUs")
+    ids = []
+    for value in values:
+        if type(value) is int and value >= 0:
+            gpu = str(value)
+        elif isinstance(value, str) and value and not any(c.isspace() or c == "," for c in value):
+            if value.isdecimal():
+                gpu = str(int(value))
+            elif value.startswith(("GPU-", "MIG-")) and len(value) > 4:
+                gpu = value
+            else:
+                raise ValueError(f"GPU inválida: {value!r}")
+        else:
+            raise ValueError(f"GPU inválida: {value!r}")
+        if gpu in ids:
+            raise ValueError(f"GPU repetida: {gpu}")
+        ids.append(gpu)
+    return tuple(ids)
+
+
+def _validate_concurrency(value: int | None, where: str) -> None:
+    if value is not None and (type(value) is not int or value < 1):
+        raise ValueError(f"{where}: concurrency deve ser um inteiro positivo")
 
 
 def load_config(path: str | Path) -> ExperimentConfig:
@@ -204,6 +280,11 @@ def _build(cls: type, data: dict[str, Any], where: str) -> Any:
         raise ValueError(f"{where}: chaves desconhecidas {sorted(unknown)}; válidas: {valid}")
     if data.get("evaluations") is not None:
         data = {**data, "evaluations": tuple(data["evaluations"])}
+    if "exclude_ids" in data:
+        ids = data["exclude_ids"]
+        if not isinstance(ids, (list, tuple)) or any(not isinstance(i, str) for i in ids):
+            raise ValueError(f"{where}: exclude_ids deve ser uma lista de IDs")
+        data = {**data, "exclude_ids": tuple(sorted(set(ids)))}
     try:
         return cls(**data)
     except TypeError as exc:

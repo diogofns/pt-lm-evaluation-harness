@@ -168,6 +168,105 @@ def test_config_rejects_unknown_keys():
         parse_config({**base, "models": [{"name": "m", "type": "chat"}]})
 
 
+@pytest.mark.parametrize("model_type,default", [("base", 64), ("instruct", 64), ("api", 8)])
+@pytest.mark.parametrize(
+    "global_value,model_value,expected",
+    [(None, None, None), (32, None, 32), (32, 4, 4), (None, 4, 4), (1, None, 1)],
+)
+def test_concurrency_reaches_client_with_model_override(
+    model_type, default, global_value, model_value, expected
+):
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "concurrency": global_value,
+            "models": [
+                {"name": "m", "type": model_type, "base_url": "http://x/v1", "concurrency": model_value}
+            ],
+            "benchmarks": ["energy_regulacao"],
+        }
+    )
+    step = cfg.plan()[0]
+    client = Client.for_model(step.model, "http://x/v1", None)
+    assert client.concurrency == (default if expected is None else expected)
+    assert step.model is cfg.models[0]
+
+
+@pytest.mark.parametrize("value", [0, -1, True, False, 1.5, "8"])
+@pytest.mark.parametrize("scope", ["global", "model"])
+def test_concurrency_rejects_invalid_limits(value, scope):
+    data = {
+        "experiment": "x",
+        "models": [{"name": "m", "type": "base"}],
+        "benchmarks": ["energy_regulacao"],
+    }
+    target = data if scope == "global" else data["models"][0]
+    target["concurrency"] = value
+    with pytest.raises(ValueError, match="concurrency deve ser um inteiro positivo"):
+        parse_config(data)
+
+
+def test_moving_concurrency_to_global_preserves_resume_fingerprint():
+    data = {
+        "experiment": "x",
+        "models": [{"name": "m", "type": "base", "concurrency": 8}],
+        "benchmarks": ["energy_regulacao"],
+    }
+    old = Experiment(parse_config(data))
+    inherited = {**data, "concurrency": 8, "models": [{"name": "m", "type": "base"}]}
+    new = Experiment(parse_config(inherited))
+    changed = Experiment(parse_config({**inherited, "concurrency": 16}))
+
+    def fingerprint(experiment):
+        step = experiment.steps[0]
+        return experiment._fingerprint(step, "1.0", "prompt", EVALUATIONS.get(step.evaluation))
+
+    assert non_default(old.steps[0].model) == non_default(new.steps[0].model)
+    assert fingerprint(old) == fingerprint(new)
+    assert fingerprint(old) != fingerprint(changed)
+
+
+def test_http_pool_supports_concurrency_above_100():
+    """O servidor só responde quando todos os 128 pedidos chegam: pool menor bloqueia."""
+    import asyncio
+
+    async def run():
+        received = 0
+        release = asyncio.Event()
+
+        async def handle(reader, writer):
+            nonlocal received
+            try:
+                headers = await reader.readuntil(b"\r\n\r\n")
+                for line in headers.split(b"\r\n"):
+                    if line.lower().startswith(b"content-length:"):
+                        await reader.readexactly(int(line.split(b":", 1)[1]))
+                received += 1
+                if received == 128:
+                    release.set()
+                await release.wait()
+                writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        async with await asyncio.start_server(handle, "127.0.0.1", 0, backlog=256) as server:
+            port = server.sockets[0].getsockname()[1]
+            client = Client("m", f"http://127.0.0.1:{port}", chat=True, concurrency=128, max_retries=1)
+            try:
+                responses = await asyncio.wait_for(
+                    asyncio.gather(*(client._post("/test", {}) for _ in range(128))), timeout=10
+                )
+                assert responses == [{}] * 128
+                assert received == 128
+            finally:
+                release.set()
+                await client.aclose()
+
+    asyncio.run(run())
+
+
 def test_stop_sequences_only_without_chat(monkeypatch):
     """Em chat, stops cortariam o raciocínio quando o modelo cita o enunciado."""
     import asyncio
@@ -486,3 +585,47 @@ def test_answer_letter_is_never_mistaken_for_option_text():
     row = {"_split": "test", "_index": 0, "q": "?", "a": "A", "b": "~A", "c": "B", "d": "~B", "gold": "B"}
     columns = Columns(question="q", options=["a", "b", "c", "d"], answer="gold", answer_is="letter")
     assert columns.to_item(row).gold == 1
+
+
+def test_exclusions_apply_before_limit_and_survive_worker_serialization(tmp_path):
+    import asyncio
+    import json
+    from dataclasses import asdict
+
+    data = {
+        "experiment": "exclusions",
+        "output_dir": str(tmp_path),
+        "limit": 1,
+        "models": [{"name": name, "type": "base"} for name in ("original", "checkpoint")],
+        "benchmarks": [{"name": _memory_benchmark(), "exclude_ids": ["test-1"]}],
+    }
+    cfg = parse_config(data)
+    restored = parse_config(json.loads(json.dumps(asdict(cfg))))
+    experiment = Experiment(restored)
+    for step in experiment.steps:
+        items, _ = experiment.select(step)
+        assert [item.id for item in items] == ["test-0"]
+        assert step.exclude_ids == ("test-1",)
+    result = asyncio.run(experiment.run_step(experiment.steps[0], _FakeBackend()))
+    assert result["evaluation"]["exclude_ids"] == ["test-1"]
+    assert result["benchmark"]["n_items"] == 2
+    assert result["benchmark"]["n_evaluated"] == 1
+    plain = Experiment(parse_config({**data, "benchmarks": [_memory_benchmark()]}))
+    evaluation = EVALUATIONS.get("mcf")
+    assert experiment._fingerprint(experiment.steps[0], "1", "p", evaluation) != plain._fingerprint(
+        plain.steps[0], "1", "p", evaluation
+    )
+
+
+@pytest.mark.parametrize("excluded", ["test-1", [1], ["unknown"]])
+def test_exclusions_reject_invalid_or_unknown_ids(excluded):
+    with pytest.raises(ValueError, match="exclude_ids"):
+        cfg = parse_config(
+            {
+                "experiment": "x",
+                "models": [{"name": "m", "type": "base"}],
+                "benchmarks": [{"name": _memory_benchmark(), "exclude_ids": excluded}],
+            }
+        )
+        experiment = Experiment(cfg)
+        experiment.select(experiment.steps[0])

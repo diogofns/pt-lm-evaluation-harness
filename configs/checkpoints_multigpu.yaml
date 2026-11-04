@@ -1,0 +1,42 @@
+# Substitua os caminhos pelos checkpoints HF exportados, incluindo tokenizer.
+# Escolha GPUs disponíveis no host. Os índices não são remapeados pelo avaliador.
+experiment: checkpoints_treino
+output_dir: output
+seed: 1234
+num_fewshot: 0
+concurrency: 128          # pedidos por modelo ativo
+# Sem limit: usa todos os itens dos benchmarks.
+gpus: [0, 1]             # também aceita mais GPUs e UUIDs GPU-…
+
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000             # GPU 0 usa 8000; GPU 1 usa 8001
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 32768
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.80
+    generation_config: vllm
+    seed: 1234
+
+# Use type: instruct para checkpoints de pós-treino com chat template.
+# Mantenha pesos imutáveis em cada caminho, para preservar a validade da retomada.
+models:
+  - name: /caminho/treino/checkpoint-1000
+    type: base
+    label: step-1000
+  - name: /caminho/treino/checkpoint-2000
+    type: base
+    label: step-2000
+  - name: /caminho/treino/checkpoint-3000
+    type: base
+    label: step-3000
+
+benchmarks:
+  - enem
+  - oab_exams
+  - mmlu_pt_high_school
+  - mmlu_pt_undergraduate

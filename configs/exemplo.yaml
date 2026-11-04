@@ -12,6 +12,8 @@ output_dir: output
 seed: 1234                  # sorteio de itens (limit) e de exemplos few-shot
 limit: 100                  # itens por benchmark (omita para usar todos)
 num_fewshot: 0              # padrão dos benchmarks
+# gpus: [0, 1]           # opcional: fila de modelos, um por GPU, portas 8000 e 8001
+concurrency: 64            # pedidos HTTP simultâneos; cada modelo pode sobrescrever
 fewshot_as_multiturn: false # em chat: exemplos como turnos usuário/assistente
 
 server:                     # vLLM gerenciado (modelos sem base_url)
@@ -29,7 +31,7 @@ server:                     # vLLM gerenciado (modelos sem base_url)
 # type: instruct → geração com chat template (gen, ifeval)
 # type: api      → geração, como instruct
 # Parâmetros por modelo: thinking, generate (max_tokens, temperature, ...),
-# server_args (somados a server.args), system_prompt, chat_template, label, base_url.
+# server_args (somados a server.args), concurrency, system_prompt, chat_template, label, base_url.
 
 models:
   - name: Qwen/Qwen2.5-0.5B
@@ -63,6 +65,9 @@ models:
 
 benchmarks:
   - energy_regulacao
+  - global_mmlu_pt
+  - mmlu_prox_pt
+  - global_piqa_nonparallel_pt_br
   - name: mmmlu_pt_br
     num_fewshot: 5
   - name: ifeval_pt                       # só modelos instruct/api; precisa do extra `ifeval`

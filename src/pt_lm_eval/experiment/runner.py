@@ -1,4 +1,4 @@
-"""Execução de um experimento: um modelo por vez, na ordem do YAML, com todos os seus benchmarks.
+"""Execução sequencial ou fila de modelos distribuída entre GPUs explícitas.
 
 Para cada modelo: sobe o endpoint, roda um teste de sanidade (um pedido de cada tipo que
 ele vai usar) e os passos do plano, salvando cada amostra assim que pontuada; uma
@@ -28,6 +28,7 @@ from ..evaluations import EVALUATIONS, Evaluation
 from ..inference import Client, Endpoint, ServerError
 from .config import ExperimentConfig, ModelConfig, Step
 from .lengths import LengthCheck, TokenCounter
+from .pool import GPUPool
 from .report import Results, build_result, describe_requests
 
 log = logging.getLogger("pt_lm_eval")
@@ -44,6 +45,7 @@ class Experiment:
         self.config_path = config_path
         self.steps = cfg.plan()
         self.results = Results(cfg.out_dir)
+        self.pool = GPUPool(cfg) if cfg.gpus is not None else None
 
     # --- execução -------------------------------------------------------------------
 
@@ -52,22 +54,33 @@ class Experiment:
         out.mkdir(parents=True, exist_ok=True)
         if self.config_path:
             shutil.copy(self.config_path, out / "experiment.yaml")
-        failed = []
-        for model, steps in self._by_model():
-            log.info("modelo %s: %d passos", model.display_name, len(steps))
-            try:
-                with Endpoint.for_model(model, self.cfg.server, out / "logs") as base_url:
-                    client = Client.for_model(model, base_url, self._max_length(model))
-                    asyncio.run(self._run_model(steps, client))
-            except (ServerError, SmokeTestError) as exc:
-                reason = (
-                    "teste de sanidade falhou" if isinstance(exc, SmokeTestError) else "servidor não subiu"
-                )
-                log.error("modelo %s pulado (%s): %s", model.display_name, reason, exc)
-                failed.append(model.display_name)
-        log.info("relatório: %s", self.results.write_csv(self.cfg.experiment))
+        try:
+            if self.pool is not None:
+                failed = self.pool.run([model for model, _ in self._by_model()])
+            else:
+                failed = [
+                    model.display_name
+                    for model, steps in self._by_model()
+                    if not self.execute_model(model, steps)
+                ]
+        finally:
+            # Só o coordenador escreve o CSV, depois de todos os processos terminarem.
+            log.info("relatório: %s", self.results.write_csv(self.cfg.experiment))
         if failed:
             raise RuntimeError(f"modelos pulados: {failed}; veja os logs acima")
+
+    def execute_model(self, model: ModelConfig, steps: Sequence[Step]) -> bool:
+        """Executa todos os passos de um modelo e só retorna depois de desligar o endpoint."""
+        log.info("modelo %s: %d passos", model.display_name, len(steps))
+        try:
+            with Endpoint.for_model(model, self.cfg.server, self.cfg.out_dir / "logs") as base_url:
+                client = Client.for_model(model, base_url, self._max_length(model))
+                asyncio.run(self._run_model(steps, client))
+        except (ServerError, SmokeTestError) as exc:
+            reason = "teste de sanidade falhou" if isinstance(exc, SmokeTestError) else "servidor não subiu"
+            log.error("modelo %s pulado (%s): %s", model.display_name, reason, exc)
+            return False
+        return True
 
     def _by_model(self) -> list[tuple[ModelConfig, list[Step]]]:
         runnable = [s for s in self.steps if not s.skip_reason]
@@ -135,6 +148,12 @@ class Experiment:
         """Itens do passo (com `limit`, sorteados com a seed) e os exemplos few-shot de cada um."""
         bench, seed = BENCHMARKS.get(step.benchmark), self.cfg.seed
         items = bench.data.items
+        if step.exclude_ids:
+            excluded = set(step.exclude_ids)
+            missing = excluded - {item.id for item in items}
+            if missing:
+                raise ValueError(f"{step.benchmark}: exclude_ids desconhecidos: {sorted(missing)}")
+            items = [item for item in items if item.id not in excluded]
         if step.limit is not None and step.limit < len(items):
             keep = set(random.Random(seed).sample(range(len(items)), step.limit))
             items = [it for i, it in enumerate(items) if i in keep]
@@ -146,6 +165,8 @@ class Experiment:
         key += [step.num_fewshot, step.limit, self.cfg.seed]
         if step.fewshot_as_multiturn:
             key.append("multiturn")
+        if step.exclude_ids:
+            key.append({"exclude_ids": step.exclude_ids})
         if evaluation.scoring_version:
             key.append(f"scoring:{evaluation.scoring_version}")
         return hashlib.sha256(json.dumps(key, sort_keys=True, default=str).encode()).hexdigest()[:16]
@@ -187,6 +208,8 @@ class Experiment:
 
     def dry_run(self) -> bool:
         """Mostra o plano e a checagem de contexto; devolve False se algo não cabe."""
+        if self.pool is not None:
+            print(self.pool.describe(), flush=True)
         print(self.describe(), flush=True)
         checks = self.check_lengths()
         header = ("modelo", "benchmark", "avaliação", "itens", "maior", "limite", "situação")

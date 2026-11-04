@@ -14,7 +14,7 @@ com resultados reprodutíveis e auditáveis item a item. Junta o melhor do
 
 **Recursos:**
 
-- 12 benchmarks em português: múltipla escolha (ENEM, OAB, MMLU-PT, MMMLU, Global-MMLU,
+- 14 benchmarks em português: múltipla escolha (ENEM, OAB, MMLU-PT, MMMLU, Global-MMLU,
   Belebele e outros) e seguimento de instruções (Portuguese-IFEval).
 - Dois cenários, escolhidos pelo tipo do modelo: **base** avaliado por log-likelihood
   (formulações MCF e CF) e **instruct** avaliado por geração, com chat template.
@@ -103,15 +103,80 @@ pt-lm-eval run meu_experimento.yaml --dry-run   # plano + confere se os prompts 
 pt-lm-eval run meu_experimento.yaml
 ```
 
-Os modelos rodam um de cada vez, na ordem do YAML: o vLLM sobe, roda todos os benchmarks
-daquele modelo e cai antes do próximo. O que vem num modelo ou benchmark sobrescreve a
+Por padrão, os modelos rodam um de cada vez, na ordem do YAML: o vLLM sobe, roda todos
+os benchmarks daquele modelo e cai antes do próximo. Com `gpus`, uma fila distribui
+os modelos entre as GPUs indicadas. O que vem num modelo ou benchmark sobrescreve a
 configuração geral; chaves desconhecidas são erro, para pegar erros de digitação.
 
 | Parte | O que define |
 |-------|--------------|
-| geral (topo do arquivo) | `experiment`, `output_dir`, `seed`, `limit`, `num_fewshot`, `fewshot_as_multiturn`, `server` |
-| `models` | cada modelo: `name`, `type` (base, instruct ou api), `thinking`, `generate`, `server_args`, `system_prompt`, `base_url` |
-| `benchmarks` | cada benchmark: `name`, `num_fewshot`, `fewshot_as_multiturn`, `limit` (número ou `all`) |
+| geral (topo do arquivo) | `experiment`, `output_dir`, `seed`, `limit`, `num_fewshot`, `fewshot_as_multiturn`, `concurrency`, `gpus`, `server` |
+| `models` | cada modelo: `name`, `type` (base, instruct ou api), `thinking`, `generate`, `server_args`, `concurrency`, `system_prompt`, `base_url` |
+| `benchmarks` | cada benchmark: `name`, `num_fewshot`, `fewshot_as_multiturn`, `limit` (número ou `all`), `exclude_ids` |
+
+`exclude_ids` permite registrar IDs de itens excluídos de um benchmark, por exemplo `exclude_ids: [stem-1605]`. A exclusão é aplicada antes de `limit`, vale para todos os modelos e formulações e fica registrada nos resultados e na identidade de retomada. IDs inexistentes são erro.
+
+`concurrency` define o máximo de pedidos HTTP simultâneos: o valor do modelo tem
+prioridade sobre o global. Se ambos forem omitidos ou `null`, o padrão é 64 para
+`base`/`instruct` e 8 para `api`. O valor deve ser um inteiro positivo.
+`server.args.max_num_seqs` controla separadamente o limite de sequências do vLLM.
+Mover o mesmo valor de `concurrency` entre modelo e topo preserva a retomada;
+alterar o valor efetivo invalida as amostras daquele modelo.
+
+### Fila de checkpoints em várias GPUs
+
+Defina `gpus` no topo do YAML e liste os checkpoints exportados no formato Hugging Face
+(pesos, configuração e tokenizer). Exemplo completo: [checkpoints_multigpu.yaml](./configs/checkpoints_multigpu.yaml).
+
+```yaml
+experiment: checkpoints_treino
+concurrency: 128
+gpus: [0, 1]
+server:
+  mode: local
+  port: 8000
+  args:
+    tensor_parallel_size: 1
+    max_num_seqs: 128
+models:
+  - {name: /caminho/treino/checkpoint-1000, type: base, label: step-1000}
+  - {name: /caminho/treino/checkpoint-2000, type: base, label: step-2000}
+  - {name: /caminho/treino/checkpoint-3000, type: base, label: step-3000}
+benchmarks: [enem, oab_exams]
+```
+
+```bash
+pt-lm-eval run configs/checkpoints_multigpu.yaml --dry-run
+pt-lm-eval run configs/checkpoints_multigpu.yaml
+```
+
+A GPU 0 começa o primeiro checkpoint e a GPU 1 começa o segundo. A primeira que
+terminar todos os benchmarks desliga seu vLLM e recebe o terceiro checkpoint.
+Cada GPU tem um processo avaliador e uma porta própria (`server.port + posição na lista`).
+`concurrency` vale **por modelo ativo**: duas GPUs com 128 podem enviar até 256 pedidos
+simultâneos no total. `max_num_seqs` também vale por servidor.
+
+Escolha GPUs disponíveis: a fila reserva somente as GPUs listadas dentro desta execução,
+sem detectar ou bloquear o uso por outros programas. Aceita índices e UUIDs `GPU-…`/`MIG-…`.
+Se `CUDA_VISIBLE_DEVICES=2,3`, use `gpus: [2, 3]`, com os mesmos IDs, não `[0, 1]`.
+As portas consecutivas precisam estar livres. Funciona com `server.mode: local` ou
+`docker`; cada modelo deve caber em uma GPU, com paralelismo de tensor, pipeline e dados
+igual a 1. Modelos com `base_url` não entram nessa fila.
+
+Os arquivos de resultados continuam separados por modelo. Use labels únicos; nomes que
+resultariam no mesmo diretório são rejeitados. O coordenador consolida o CSV ao final,
+inclusive quando há falhas ou cancelamento. Uma falha em um checkpoint é registrada e
+a fila continua; no final, o comando retorna erro se algum modelo falhou.
+O terminal mostra as alocações e conclusões. Para acompanhar os benchmarks, consulte
+`output/<experimento>/logs/<modelo>.eval.log`; o log do servidor continua em `.vllm.log`.
+O arquivo `.worker.json` registra GPU, porta e configuração efetiva do checkpoint.
+
+`Ctrl+C` ou `SIGTERM` no coordenador encerra os workers e aguarda o desligamento dos
+servidores. Reexecute o mesmo YAML para retomar as amostras já salvas. Mudar apenas
+`gpus` não invalida a retomada. Mantenha cada checkpoint em uma pasta imutável: substituir
+os pesos no mesmo caminho não muda a identidade usada pelo cache de resultados.
+A lista é lida ao iniciar a execução; novos checkpoints exigem atualizar o YAML e rodar
+novamente. Sem `gpus` (ou com `gpus: null`), o comportamento continua sequencial.
 
 ### Cenários: modelos base e instruct
 
@@ -136,6 +201,8 @@ base) aparecem no plano como "não se aplica".
 | `oab_exams` | Exame da OAB, 2010–2018 | 2.210 | `eduagarcia/oab_exams` |
 | `mmmlu_pt_br` | MMLU traduzido profissionalmente (OpenAI) | 14.042 | `openai/MMMLU` |
 | `global_mmlu_pt` | MMLU traduzido e revisado (Cohere) | 14.042 | `CohereLabs/Global-MMLU` |
+| `mmlu_prox_pt` | MMLU-ProX completo em português, 3–10 alternativas | 11.759 | `li-lab/MMLU-ProX` |
+| `global_piqa_nonparallel_pt_br` | Senso comum cultural brasileiro, 2 alternativas | 100 | `mrlbenchmarks/global-piqa-nonparallel` |
 | `belebele_pt` | Compreensão de leitura (FLORES) | 900 | `facebook/belebele` |
 | `mmlu_pt_undergraduate` | Vestibulares e concursos, graduação | 19.319 | `mmlu-pt/mmlu-pt-undergraduate-full` |
 | `mmlu_pt_undergraduate_hard` | Idem, subconjunto difícil | 11.184 | `mmlu-pt/mmlu-pt-undergraduate-hard` |
@@ -144,6 +211,11 @@ base) aparecem no plano como "não se aplica".
 | `mmlu_pt_sintetico` | Questões no estilo MMLU geradas por modelo | 11.791 | `cemig-ceia/benchmark_Qwen3-235B-A22B_MMLU_v2` |
 | `energy_regulacao` | Regulação do setor elétrico (ANEEL) | 500 | `cemig-ceia/energy-eval` |
 | `ifeval_pt` | Seguimento de instruções verificáveis | 535 | `gap-ufg/Portuguese-IFEval` |
+
+A comparação dos melhores checkpoints Qwen/Nemotron com seus originais, Tucano2 e
+Qwen3-4B-Base nos três benchmarks adicionais está em
+[`configs/cpt_multilingual_pt.yaml`](configs/cpt_multilingual_pt.yaml). Usa conjuntos completos,
+zero-shot e MCF/CF; Global PIQA seleciona exclusivamente `por_latn_braz` de **nonparallel**.
 
 Para ver os prompts sem chamar modelo e validar um benchmark inteiro:
 

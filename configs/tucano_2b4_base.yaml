@@ -1,0 +1,46 @@
+# TucanoBR/Tucano-2b4, revisão b8def49a1931508a7cedc1f3fd6ff163515b0983
+# Mesmo protocolo base MCF/CF, zero-shot, contexto nativo de 4096 tokens.
+experiment: tucano_2b4_base_4k_full_b200
+output_dir: output
+seed: 1234
+num_fewshot: 0
+gpus:
+- 0
+concurrency: 128
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 4096
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.8
+    generation_config: vllm
+    seed: 1234
+    trust_remote_code: true
+models:
+- name: /workspace/projects/icml/pt-lm-evaluation-harness/.cache/huggingface/hub/models--TucanoBR--Tucano-2b4/snapshots/b8def49a1931508a7cedc1f3fd6ff163515b0983
+  type: base
+  label: tucano-2b4-base
+benchmarks:
+- name: enem
+  evaluations:
+  - mcf
+  - cf
+- name: oab_exams
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_high_school
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_undergraduate
+  exclude_ids:
+  - stem-1605
+  evaluations:
+  - mcf
+  - cf

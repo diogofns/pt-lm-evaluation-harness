@@ -1,0 +1,62 @@
+experiment: nemotron_qwen_4b_no_thinking_full_b200
+output_dir: output
+seed: 1234
+num_fewshot: 0
+gpus: [0, 1, 2, 3]  # um modelo por GPU; portas 8000–8003
+concurrency: 128  # pedidos HTTP simultâneos enviados pelo avaliador
+
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 32768
+    max_num_seqs: 128  # sequências processadas simultaneamente pelo vLLM
+    max_num_batched_tokens: 16384  # orçamento de tokens por iteração
+    gpu_memory_utilization: 0.80
+    generation_config: vllm
+    seed: 1234
+
+models:
+  - name: nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+    type: instruct
+    thinking: false
+    server_args:
+      trust_remote_code: true
+      mamba_ssm_cache_dtype: float32
+      reasoning_parser: nemotron_v3
+    generate:
+      temperature: 0
+      max_tokens: 4096
+
+  - name: Qwen/Qwen3.5-4B
+    type: instruct
+    thinking: false
+    server_args:
+      reasoning_parser: qwen3
+      language_model_only: true
+    generate:
+      temperature: 0
+      max_tokens: 4096
+
+  - name: Qwen/Qwen3.5-4B-Base
+    type: base
+    server_args:
+      language_model_only: true
+
+  - name: CEIA-UFG/Gemma-3-Gaia-PT-BR-4b-it
+    type: instruct
+    server_args:
+      language_model_only: true
+    generate:
+      temperature: 0
+      max_tokens: 4096
+
+benchmarks:
+  - enem
+  - oab_exams
+  - mmlu_pt_high_school
+  - mmlu_pt_undergraduate
+  - ifeval_pt

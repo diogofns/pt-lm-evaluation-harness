@@ -1,0 +1,46 @@
+# Polygl0t/Tucano2-qwen-3.7B-Base, revisão 1bebfaf643b56109e7fa441c203778680802abae
+# Mesmo protocolo MCF/CF dos Nemotron; contexto limitado aos 4096 tokens declarados pelo Tucano.
+experiment: tucano2_qwen_3_7b_base_4k_full_b200
+output_dir: output
+seed: 1234
+num_fewshot: 0
+gpus:
+- 0
+concurrency: 128
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 4096
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.8
+    generation_config: vllm
+    seed: 1234
+    trust_remote_code: true
+models:
+- name: /workspace/projects/icml/pt-lm-evaluation-harness/.cache/huggingface/hub/models--Polygl0t--Tucano2-qwen-3.7B-Base/snapshots/1bebfaf643b56109e7fa441c203778680802abae
+  type: base
+  label: tucano2-qwen-3.7b-base
+benchmarks:
+- name: enem
+  evaluations:
+  - mcf
+  - cf
+- name: oab_exams
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_high_school
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_undergraduate
+  exclude_ids:
+  - stem-1605
+  evaluations:
+  - mcf
+  - cf

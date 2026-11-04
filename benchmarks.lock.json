@@ -31,10 +31,26 @@
       "gen": "0b156e0b4e918477"
     }
   },
+  "global_piqa_nonparallel_pt_br@1.0": {
+    "source": "hf:mrlbenchmarks/global-piqa-nonparallel/por_latn_braz:test@6777742fa3634c0583cda3b7f8a482ea7b1b0937",
+    "prompts": {
+      "mcf": "3974d6946c976d02",
+      "cf": "2f06b19e711e8cc9",
+      "gen": "daa4a8bf9b1c182e"
+    }
+  },
   "ifeval_pt@1.0": {
     "source": "hf:gap-ufg/Portuguese-IFEval:test@0ff3fe8d82a5cdb43153f86b301b2c9d5c6ea098",
     "prompts": {
       "ifeval": "69f48cc40f35101e"
+    }
+  },
+  "mmlu_prox_pt@1.0": {
+    "source": "hf:li-lab/MMLU-ProX/pt:test@8e6106a6c6ce1c5027e66cc338143cf997b2aa09",
+    "prompts": {
+      "mcf": "d30be476939ab663",
+      "cf": "51b8b40ea651a3bb",
+      "gen": "aa3139583d0ee703"
     }
   },
   "mmlu_pt_high_school@1.0": {

@@ -15,6 +15,7 @@ evaluations/    base.py (Evaluation) · prompts.py · multiple_choice.py (mcf, c
                 ifeval/ (InstructionFollowing + uma classe Instruction por instrução)
 inference/      client.py (Client) · server.py (Endpoint → ExternalEndpoint, LocalVLLM, DockerVLLM)
 experiment/     config.py (YAML e plano) · runner.py (Experiment) · lengths.py · report.py (Results)
+                pool.py (fila por GPU) · worker.py (processo de um checkpoint)
 cli.py          pt-lm-eval run | benchmarks list/preview/check
 ```
 

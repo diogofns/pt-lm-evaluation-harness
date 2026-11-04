@@ -1,0 +1,46 @@
+# Qwen/Qwen3-4B-Base, revisão 906bfd4b4dc7f14ee4320094d8b41684abff8539
+# Mesmo protocolo base: zero-shot, MCF/CF, contexto de 8192 tokens.
+experiment: qwen3_4b_base_8k_full_b200
+output_dir: output
+seed: 1234
+num_fewshot: 0
+gpus:
+- 0
+concurrency: 128
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 8192
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.8
+    generation_config: vllm
+    seed: 1234
+    trust_remote_code: true
+models:
+- name: /workspace/projects/icml/pt-lm-evaluation-harness/.cache/huggingface/hub/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539
+  type: base
+  label: qwen3-4b-base
+benchmarks:
+- name: enem
+  evaluations:
+  - mcf
+  - cf
+- name: oab_exams
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_high_school
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_undergraduate
+  exclude_ids:
+  - stem-1605
+  evaluations:
+  - mcf
+  - cf

@@ -1,0 +1,63 @@
+# Qwen3.5 CPT + original; type: base selects MCF/CF without chat.
+experiment: pt_qwen_kd_pt_v1_base_8k_full_b200
+output_dir: output
+seed: 1234
+num_fewshot: 0
+gpus:
+- 0
+- 1
+- 2
+- 3
+- 4
+concurrency: 128
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 8192
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.8
+    generation_config: vllm
+    seed: 1234
+    trust_remote_code: true
+    language_model_only: true
+    mamba_ssm_cache_dtype: float32
+models:
+- name: /workspace/projects/icml/pt-qwen-kd/runs/pt-v1/exports/iter_0000500
+  type: base
+  label: qwen-pt-v1-step-0500
+- name: /workspace/projects/icml/pt-qwen-kd/runs/pt-v1/exports/iter_0001000
+  type: base
+  label: qwen-pt-v1-step-1000
+- name: /workspace/projects/icml/pt-qwen-kd/runs/pt-v1/exports/iter_0001500
+  type: base
+  label: qwen-pt-v1-step-1500
+- name: /workspace/projects/icml/pt-qwen-kd/runs/pt-v1/exports/iter_0002000
+  type: base
+  label: qwen-pt-v1-step-2000
+- name: /root/.cache/huggingface/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  type: base
+  label: qwen3.5-4b-original
+benchmarks:
+- name: enem
+  evaluations:
+  - mcf
+  - cf
+- name: oab_exams
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_high_school
+  evaluations:
+  - mcf
+  - cf
+- name: mmlu_pt_undergraduate
+  exclude_ids:
+  - stem-1605
+  evaluations:
+  - mcf
+  - cf

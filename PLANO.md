@@ -103,6 +103,16 @@ referência nos testes de paridade.
       para os arquivos do experimento; `TokenCounter` para a checagem de contexto
 - [x] Comportamento idêntico: trava de prompts intocada e paridades mantidas
 
+### F8: fila de checkpoints por GPU (2026-10-17)
+
+- [x] `gpus` opcional: um checkpoint Hugging Face por GPU, com fila dinâmica
+- [x] Processos e portas separados; GPU reutilizada após encerrar o vLLM
+- [x] Falhas isoladas por modelo, cancelamento com limpeza e CSV pelo coordenador
+- [x] Retomada compatível e execução sequencial mantida quando `gpus` é omitido
+- [x] Testes com subprocessos simulados, sem carregar modelos nas GPUs
+
+A opção explícita de fila amplia a decisão sequencial da F5; o padrão permanece sequencial.
+
 ## Problemas conhecidos dos datasets (fora do escopo)
 
 Não mexemos nos datasets; o foco é o framework avaliar corretamente. Registrados para

@@ -164,6 +164,7 @@ def build_result(
             "cf_normalization": bench.cf_normalization,
             "seed": cfg.seed,
             "limit": step.limit,
+            "exclude_ids": list(step.exclude_ids),
             "fingerprint": fingerprint,
         },
         "timing": timing,
