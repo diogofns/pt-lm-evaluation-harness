@@ -1,11 +1,3 @@
-"""Linha de comando: `pt-lm-eval run` e `pt-lm-eval benchmarks list|preview|check`.
-
-O `check` carrega todos os itens, monta todos os prompts, confere o cartão (card.md) e
-compara o hash dos prompts com a trava (`benchmarks.lock.json`): se o prompt de um
-benchmark mudar, a versão dele precisa mudar também, para resultados de prompts
-diferentes nunca se misturarem.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -48,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     preview.add_argument("name")
     preview.add_argument("-e", "--evaluation")
     preview.add_argument("-n", type=int, default=2, help="quantos itens mostrar")
-    preview.add_argument("--num-fewshot", type=int, default=0)
+    preview.add_argument("--num-fewshot", type=int, default=None)
     check = bench.add_parser("check", help="valida dados, prompts, cartão e versão")
     check.add_argument("names", nargs="*")
     check.add_argument("--all", action="store_true", help="todos os benchmarks")
@@ -66,9 +58,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         experiment = Experiment(load_config(args.config), config_path=args.config)
         if args.dry_run:
-            experiment.dry_run()
-        else:
-            experiment.run()
+            return 0 if experiment.dry_run() else 1
+        experiment.run()
     elif args.action == "list":
         for name in BENCHMARKS.names():
             b = BENCHMARKS.get(name)
@@ -83,12 +74,23 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def show_prompts(name: str, evaluation: str | None = None, n: int = 2, num_fewshot: int = 0) -> None:
+def show_prompts(
+    name: str, evaluation: str | None = None, n: int = 2, num_fewshot: int | None = None
+) -> None:
     bench = BENCHMARKS.get(name)
+    if evaluation is not None and evaluation not in bench.evaluations:
+        raise ValueError(f"{name}: avaliação {evaluation!r} não declarada; disponíveis: {bench.evaluations}")
+    if n < 1 or (num_fewshot is not None and num_fewshot < 0):
+        raise ValueError("-n deve ser positivo e --num-fewshot não pode ser negativo")
+    num_fewshot = bench.resolve_num_fewshot(num_fewshot)
+    items = bench.data.items
+    if bench.fewshot_holdout:
+        items, shots = bench.select_for_evaluation(items, num_fewshot, limit=None, seed=1234)
+    else:
+        shots = bench.select_shots_for_items(items[:n], num_fewshot, seed=1234)
     for ev_name in [evaluation] if evaluation else bench.evaluations:
-        for item in bench.data.items[:n]:
-            shots = bench.select_shots(item, num_fewshot, seed=1234)
-            desc = describe_requests(EVALUATIONS.get(ev_name).build(item, shots))
+        for item in items[:n]:
+            desc = describe_requests(EVALUATIONS.get(ev_name).build(item, shots[item.id]))
             print(f"=== {name} · {ev_name} · item {item.id} · gold={getattr(item, 'gold', '?')}")
             print("\n---\n".join(desc["prompts"]) + "\n---")
             if "continuations" in desc:
@@ -124,18 +126,24 @@ def _check_one(name: str, lock: dict, update_lock: bool) -> bool:
                 raise TypeError(
                     f"{ev_name} espera {ev.item_type.__name__}; item {item.id} é {type(item).__name__}"
                 )
-            ev.build(item, pool[:1])
+            ev.build(item, pool[:1] if ev.supports_fewshot else [])
         signatures[ev_name] = bench.prompt_signature(ev)
 
     problems = card_problems(bench.card)
     key = f"{name}@{bench.version}"
+    source = bench.source.describe()
     if update_lock:
-        lock[key] = {"source": bench.source.describe(), "prompts": signatures}
+        lock[key] = {"source": source, "prompts": signatures}
     elif key not in lock:
         problems.append(f"{key} não está em benchmarks.lock.json (rode check --update-lock)")
-    elif lock[key]["prompts"] != signatures:
-        changed = sorted(e for e in signatures if lock[key]["prompts"].get(e) != signatures[e])
-        problems.append(f"prompts de {changed} mudaram sem mudar a versão {bench.version}: aumente a versão")
+    else:
+        if lock[key]["source"] != source:
+            problems.append(f"a fonte mudou sem mudar a versão {bench.version}: aumente a versão")
+        if lock[key]["prompts"] != signatures:
+            previous = lock[key]["prompts"]
+            keys = previous.keys() | signatures.keys()
+            changed = sorted(e for e in keys if previous.get(e) != signatures.get(e))
+            problems.append(f"prompts de {changed} mudaram na versão {bench.version}: aumente a versão")
 
     subjects = Counter(getattr(it, "subject", None) for it in items)
     no_subject = subjects.pop(None, 0)
@@ -153,7 +161,7 @@ def _check_one(name: str, lock: dict, update_lock: bool) -> bool:
         kinds = {i for it in items for i in it.instruction_ids}
         total = sum(len(it.instruction_ids) for it in items)
         print(f"   {total} instruções de {len(kinds)} tipos; por prompt {dict(sorted(per_item.items()))}")
-    print(f"   fonte: {bench.source.describe()}")
+    print(f"   fonte: {source}")
     for p in problems:
         print(f"   problema: {p}")
     return not problems

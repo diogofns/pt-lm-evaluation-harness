@@ -1,9 +1,3 @@
-"""Benchmarks: um por pasta (benchmarks/<nome>/benchmark.py + card.md).
-
-Importar este pacote importa cada `benchmark.py`, e cada subclasse concreta de
-Benchmark se registra em BENCHMARKS.
-"""
-
 import importlib
 from pathlib import Path
 

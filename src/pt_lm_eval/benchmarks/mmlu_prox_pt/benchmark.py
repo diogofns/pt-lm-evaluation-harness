@@ -18,6 +18,6 @@ class MMLUProXPt(Benchmark):
             id=str(row["question_id"]),
             question=row["question"],
             options=options,
-            gold=letter_index(row["answer"]),  # mesmo campo usado pela referência lm-eval
+            gold=letter_index(row["answer"]),  # gabarito explícito em forma de letra
             subject=row["category"],
         )

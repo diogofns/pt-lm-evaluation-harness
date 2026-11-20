@@ -1,14 +1,3 @@
-"""Avaliações de múltipla escolha: por log-likelihood (mcf, cf) e por geração (gen).
-
-- mcf: opções no prompt; pontua " A", " B", … após "Resposta:". Métrica: acc.
-- cf:  opções fora do prompt; pontua " <texto da opção>". Métricas: acc, acc_char
-       (normalizado por caracteres, o acc_norm do lm-eval) e acc_token (por tokens).
-- gen: o modelo escreve e a letra é extraída do formato pedido ("Resposta: X"),
-       normalizado, como no guia do OpenEvals. Métricas: acc, extracted e truncated.
-
-Todas registram random_baseline (1/nº de opções).
-"""
-
 from __future__ import annotations
 
 import re
@@ -68,16 +57,19 @@ class LoglikelihoodMCQ(Evaluation):
     def targets(self, item: MCQItem) -> Sequence[str]: ...
 
     def choices(self, item: MCQItem) -> list[str]:
-        return [prompts.TARGET_DELIMITER + t.strip() for t in self.targets(item)]
+        preserve = item.protocol == "global_piqa"
+        return [prompts.TARGET_DELIMITER + (t if preserve else t.strip()) for t in self.targets(item)]
 
     def build(
         self, item: MCQItem, shots: Sequence[MCQItem], multiturn: bool = False
     ) -> list[LoglikelihoodRequest]:
         context = prompts.with_shots([self.render(s, True) for s in shots], self.render(item, False))
+        context = prompts.description(item) + context
         return [LoglikelihoodRequest(context, c) for c in self.choices(item)]
 
     def metrics(self, item: MCQItem, responses: Sequence[LoglikelihoodResponse]) -> dict[str, float]:
-        return {"acc": float(argmax([r.logprob for r in responses]) == item.gold)}
+        acc = float(argmax([r.logprob for r in responses]) == item.gold)
+        return {"acc": acc, **({"acc_norm": acc} if item.protocol == "mmmlu" else {})}
 
     def score(self, item: MCQItem, responses: Sequence[LoglikelihoodResponse]) -> Scored:
         lls = [r.logprob for r in responses]
@@ -117,14 +109,22 @@ class ClozeFormulation(LoglikelihoodMCQ):
 
     def metrics(self, item: MCQItem, responses: Sequence[LoglikelihoodResponse]) -> dict[str, float]:
         lls = [r.logprob for r in responses]
-        texts = [c.strip() for c in self.choices(item)]
+        texts = (
+            list(item.options) if item.protocol == "global_piqa" else [c.strip() for c in self.choices(item)]
+        )
         char = [ll / max(1, len(t)) for ll, t in zip(lls, texts, strict=True)]
         token = [ll / max(1, r.n_tokens) for ll, r in zip(lls, responses, strict=True)]
-        return {
+        metrics = {
             **super().metrics(item, responses),
             "acc_char": float(argmax(char) == item.gold),
             "acc_token": float(argmax(token) == item.gold),
         }
+        if item.protocol == "global_piqa":
+            byte = [ll / max(1, len(t.encode("utf-8"))) for ll, t in zip(lls, texts, strict=True)]
+            metrics["acc_bytes"] = float(argmax(byte) == item.gold)
+        if item.protocol == "mmmlu":
+            metrics.pop("acc_norm", None)  # no cloze de texto equivalente no protocolo oficial
+        return metrics
 
 
 class GenerativeMCQ(Evaluation):
@@ -139,6 +139,15 @@ class GenerativeMCQ(Evaluation):
     def build(
         self, item: MCQItem, shots: Sequence[MCQItem], multiturn: bool = False
     ) -> list[GenerateRequest]:
+        if item.protocol == "global_piqa":
+            return [
+                GenerateRequest(
+                    prompt=prompts.gen(item, shots),
+                    max_tokens=2048,
+                    params={"temperature": 0.8, "top_p": 0.95},
+                    enforce_generation_config=True,
+                )
+            ]
         if multiturn and shots:
             messages = prompts.gen_messages(item, shots)
             prompt = prompts.FEWSHOT_DELIMITER.join(f"[{m['role']}] {m['content']}" for m in messages)
@@ -147,10 +156,14 @@ class GenerativeMCQ(Evaluation):
 
     def score(self, item: MCQItem, responses: Sequence[GenerateResponse]) -> Scored:
         response = responses[0]
-        gold, pred = item.letters[item.gold], extract_letter(response.text, item.letters)
+        gold, pred = (
+            item.letters[item.gold],
+            extract_letter(response.text, item.letters),
+        )
         return Scored(
             metrics={
                 "acc": float(pred == gold),
+                **({"exact_match": float(pred == gold)} if item.protocol == "global_piqa" else {}),
                 "extracted": float(pred is not None),
                 "truncated": float(response.finish_reason == "length"),
                 "random_baseline": 1 / len(item.options),
@@ -158,9 +171,6 @@ class GenerativeMCQ(Evaluation):
             details={
                 "gold": gold,
                 "pred": pred,
-                "response": response.text,
-                "reasoning": response.reasoning,
-                "finish_reason": response.finish_reason,
-                "error": response.error,
+                **response.details(),
             },
         )

@@ -1,8 +1,3 @@
-"""Pedidos ao modelo, respostas e a pontuação de um item.
-
-Os nomes e padrões dos campos dos pedidos entram no hash da trava de prompts.
-"""
-
 from __future__ import annotations
 
 from dataclasses import MISSING, dataclass, field, fields
@@ -26,9 +21,12 @@ class GenerateRequest:
     prompt: str
     max_tokens: int | None = None  # None = padrão do modelo
     stop: tuple[str, ...] = ()  # aplicado só sem chat template (modelos base)
+    params: dict[str, Any] = field(default_factory=dict)  # parâmetros específicos do pedido
     # Conversa pronta ({"role", "content"}); se presente, modelos de chat a recebem no
     # lugar de `prompt`, que fica como versão em texto para o registro.
     messages: tuple[dict[str, str], ...] | None = None
+    # Protocolos de referência: limite da tarefa prevalece e stops valem também em chat.
+    enforce_generation_config: bool = False
 
 
 Request = LoglikelihoodRequest | GenerateRequest
@@ -47,6 +45,15 @@ class GenerateResponse:
     reasoning: str | None = None
     finish_reason: str | None = None  # "stop", "length", …
     error: str | None = None  # preenchido quando o pedido falhou de vez
+
+    def details(self) -> dict[str, Any]:
+        """Campos de auditoria comuns a todas as avaliações por geração."""
+        return {
+            "response": self.text,
+            "reasoning": self.reasoning,
+            "finish_reason": self.finish_reason,
+            "error": self.error,
+        }
 
 
 Response = LoglikelihoodResponse | GenerateResponse

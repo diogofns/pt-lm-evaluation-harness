@@ -1,10 +1,3 @@
-"""Avaliação de seguimento de instruções (IFEval), com as instruções do Portuguese-IFEval.
-
-Métricas por item, como na referência: prompt_level_{strict,loose}_acc (todas as
-instruções seguidas), inst_level_{strict,loose}_acc (fração seguida; o agregado é sobre
-instruções, então o item pesa pelo número delas) e truncated.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -18,6 +11,7 @@ class InstructionFollowing(Evaluation):
     name = "ifeval"
     item_type = InstructionItem
     needs = frozenset({"generate"})
+    supports_fewshot = False
     scoring_version = "1"
     max_tokens = 2048  # o da geração de referência (vLLM, temperatura 0)
 
@@ -49,10 +43,7 @@ class InstructionFollowing(Evaluation):
                 "instructions": list(item.instruction_ids),
                 "strict": strict,
                 "loose": loose,
-                "response": response.text,
-                "reasoning": response.reasoning,
-                "finish_reason": response.finish_reason,
-                "error": response.error,
+                **response.details(),
             },
             weights={"inst_level_strict_acc": n, "inst_level_loose_acc": n},
         )

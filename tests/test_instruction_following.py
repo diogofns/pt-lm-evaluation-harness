@@ -1,5 +1,3 @@
-"""Verificadores do IFEval PT, strict/loose e agregação por instrução."""
-
 from __future__ import annotations
 
 import math

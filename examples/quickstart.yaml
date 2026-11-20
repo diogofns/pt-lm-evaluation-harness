@@ -1,0 +1,19 @@
+# pt-lm-eval run examples/quickstart.yaml --dry-run
+experiment: quickstart
+limit: 10                    # Items per benchmark or grouped subtask
+num_fewshot: 0
+
+server:
+  executable: vllm           # Set an absolute path if vllm is outside PATH
+  args:
+    max_model_len: 4096      # Total context for prompt and generated tokens
+
+models:
+  - name: Qwen/Qwen2.5-0.5B-Instruct
+    type: instruct
+    # base_url: http://127.0.0.1:8000/v1  # Use a running vLLM server
+
+benchmarks:
+  - name: math_pt_br
+    evaluations: [gen]
+  - ifeval_pt                # Requires the ifeval extra

@@ -1,19 +1,3 @@
-"""Paridade dos verificadores do IFEval PT com os vereditos publicados pela referência.
-
-Usa as respostas e os vereditos strict/loose de ark-aiml-research/Portuguese-IFEval
-(experiments/eval_open_*). Preparação:
-
-    curl -L https://github.com/ark-aiml-research/Portuguese-IFEval/archive/a8d8b3c.tar.gz | tar xz
-    PT_LM_EVAL_IFEVAL_REF=Portuguese-IFEval-a8d8b3c... pytest -m parity tests/test_parity_ifeval_pt.py
-
-Exige concordância exata, exceto nas divergências conhecidas, que não são do porte:
-- postscript com marcador "OBS.": os vereditos publicados desses 12 itens não são
-  reproduzidos por nenhuma versão do código da referência (o código atual, rodado
-  sobre as mesmas respostas, concorda com o nosso);
-- item 50 (repeat_prompt): o `prompt_to_repeat` do dataset difere do prompt enviado;
-- instruções que usam o langdetect: a referência não fixa a semente.
-"""
-
 from __future__ import annotations
 
 import collections

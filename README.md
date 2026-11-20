@@ -1,354 +1,106 @@
-# pt-lm-eval
+# Portuguese Language Model Evaluation Harness
 
-Avaliador de modelos de linguagem em português.
+## Overview
 
----
+`pt-lm-eval` evaluates language models on Portuguese benchmarks including Belebele, MMLU-PT, and Portuguese-IFEval. It supports multiple-choice scoring, text generation, and instruction following with vLLM or an OpenAI-compatible API. English reference tasks are also available.
 
-## Visão geral
+## Install
 
-O pt-lm-eval é um framework para avaliar modelos de linguagem em benchmarks em português,
-com resultados reprodutíveis e auditáveis item a item. Junta o melhor do
-[lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) e do
-[lighteval](https://github.com/huggingface/lighteval) e segue o
-[guia de avaliação do OpenEvals](https://huggingface.co/spaces/OpenEvals/evaluation-guidebook).
-
-**Recursos:**
-
-- 14 benchmarks em português: múltipla escolha (ENEM, OAB, MMLU-PT, MMMLU, Global-MMLU,
-  Belebele e outros) e seguimento de instruções (Portuguese-IFEval).
-- Dois cenários, escolhidos pelo tipo do modelo: **base** avaliado por log-likelihood
-  (formulações MCF e CF) e **instruct** avaliado por geração, com chat template.
-- Modelos de raciocínio com `thinking` ligado ou desligado; few-shot como turnos de conversa.
-- vLLM gerenciado pelo próprio framework (processo local ou Docker), servidor já existente
-  ou API OpenAI-compatível (OpenAI, Gemini, Azure etc.).
-- Reprodutibilidade: revisão fixada de cada dataset e trava de versões dos prompts
-  (`benchmarks.lock.json`); um prompt não muda sem a versão do benchmark mudar.
-- Auditoria: cada amostra guarda prompts, logprobs ou resposta, raciocínio e veredito.
-- Execução sem supervisão: checagem de contexto antes de rodar, teste de sanidade de cada
-  modelo e retomada de onde parou.
-- Correção conferida contra as referências: log-likelihood idêntico ao do lm-eval pedido a
-  pedido, itens idênticos aos do lm-eval e do lighteval, vereditos do IFEval idênticos aos
-  do código de referência.
-
-## Instalação
-
-Para instalar o pacote a partir do repositório (com [uv](https://docs.astral.sh/uv/)):
+From the repository root, create a virtual environment with Python 3.11 or newer.
 
 ```bash
-git clone https://github.com/diiogofernands/pt-lm-evaluation-harness.git
-cd pt-lm-evaluation-harness
-uv venv && uv pip install -e .
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 ```
 
-### Instalando extras
+### Instruction following
 
-A instalação básica avalia múltipla escolha. Recursos adicionais vêm em extras:
-
-Para o IFEval em português (spaCy, langdetect, nltk):
+Install the `ifeval` extra for Portuguese or English IFEval, including the quickstart below. The extra installs the Portuguese spaCy model.
 
 ```bash
-uv pip install -e ".[ifeval]"
+python -m pip install -e ".[ifeval]"
+python -m nltk.downloader punkt_tab
 ```
 
-Para desenvolvimento (testes e lint):
+### vLLM in a separate environment
+
+For Linux with an NVIDIA GPU, keep the evaluator's `.venv` active and use `uv` to install vLLM in a separate environment. If you need `uv`, install it with `python -m pip install uv`.
 
 ```bash
-uv pip install -e ".[dev,ifeval]"
+vllm_venv="$HOME/.venvs/pt-lm-eval-vllm"
+uv venv --python 3.12 "$vllm_venv"
+uv pip install --python "$vllm_venv/bin/python" vllm --torch-backend=auto
+"$vllm_venv/bin/vllm" --version
+printf '%s\n' "$vllm_venv/bin/vllm"
 ```
 
-O vLLM não é dependência do pacote: instale-o no ambiente onde ele vai rodar e aponte
-`server.executable` para o binário, ou use `server.mode: docker`. A tabela de todos os
-extras está no fim deste documento.
+Copy the absolute path printed above into `server.executable` in `examples/quickstart.yaml`. Follow the platform-specific instructions for other GPUs or a specific CUDA version. [vLLM GPU installation guide](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)
 
-## Uso básico
+### Docker and existing endpoints
 
-### Documentação
+To launch vLLM in Docker, set `server.mode: docker` and `server.image`.
 
-| Guia | Descrição |
-|------|-----------|
-| [Configuração de exemplo](./configs/exemplo.yaml) | Todas as opções do experimento, comentadas |
-| [Como contribuir](./CONTRIBUTING.md) | Estrutura do código, como adicionar benchmarks e avaliações |
-| [Plano](./PLANO.md) | Escopo, fases e decisões do projeto |
-| Cartões dos benchmarks | `src/pt_lm_eval/benchmarks/<nome>/card.md`: fonte, licença, construção, contaminação |
+To use a running server, set the model's `base_url` to its API root, such as `http://127.0.0.1:8000/v1` for vLLM. Set `api_key_env` to the name of the variable holding the API key. The official OpenAI endpoint uses `OPENAI_API_KEY` by default.
 
-Use `pt-lm-eval -h` para ver os comandos. Para listar os benchmarks:
+## Basic Usage
+
+List benchmarks, preview a prompt, and run the quickstart with a small Qwen model. The example evaluates MATH-PT and Portuguese-IFEval.
 
 ```bash
 pt-lm-eval benchmarks list
+pt-lm-eval benchmarks preview math_pt_br -e gen -n 1
+pt-lm-eval run examples/quickstart.yaml --dry-run
+pt-lm-eval run examples/quickstart.yaml
 ```
 
-### Rodando um experimento
+The dry run shows the evaluation plan and checks context lengths when `max_model_len` and a tokenizer are available. The example downloads its datasets and tokenizer from Hugging Face on first use.
 
-Um experimento é um arquivo YAML com três partes: a configuração geral, a lista de modelos
-e a lista de benchmarks.
+Use `pt-lm-eval --help` for available commands. The configuration guide covers model types, scoring methods, and examples for multi-GPU runs and English reference tasks. [Configuration guide](docs/configuration.md)
+
+## Tuning vLLM Inference
+
+Update `server.args` in your experiment YAML. Use the vLLM flag names with underscores, such as `max_num_seqs` for `--max-num-seqs`. Set `server_args` on a model to override shared options, or pass the flags directly to `vllm serve` when using an existing server.
 
 ```yaml
-experiment: meu_experimento
-limit: 100                       # itens por benchmark (omita para usar todos)
+concurrency: 64
 server:
-  args: {max_model_len: 8192, gpu_memory_utilization: 0.95}
-
-models:
-  - {name: Qwen/Qwen2.5-0.5B, type: base}
-  - {name: Qwen/Qwen3-4B-Instruct-2507, type: instruct, generate: {max_tokens: 1024}}
-
-benchmarks:
-  - enem
-  - {name: mmmlu_pt_br, num_fewshot: 5}
-  - {name: ifeval_pt, limit: all}
-```
-
-```bash
-pt-lm-eval run meu_experimento.yaml --dry-run   # plano + confere se os prompts cabem no contexto
-pt-lm-eval run meu_experimento.yaml
-```
-
-Por padrão, os modelos rodam um de cada vez, na ordem do YAML: o vLLM sobe, roda todos
-os benchmarks daquele modelo e cai antes do próximo. Com `gpus`, uma fila distribui
-os modelos entre as GPUs indicadas. O que vem num modelo ou benchmark sobrescreve a
-configuração geral; chaves desconhecidas são erro, para pegar erros de digitação.
-
-| Parte | O que define |
-|-------|--------------|
-| geral (topo do arquivo) | `experiment`, `output_dir`, `seed`, `limit`, `num_fewshot`, `fewshot_as_multiturn`, `concurrency`, `gpus`, `server` |
-| `models` | cada modelo: `name`, `type` (base, instruct ou api), `thinking`, `generate`, `server_args`, `concurrency`, `system_prompt`, `base_url` |
-| `benchmarks` | cada benchmark: `name`, `num_fewshot`, `fewshot_as_multiturn`, `limit` (número ou `all`), `exclude_ids` |
-
-`exclude_ids` permite registrar IDs de itens excluídos de um benchmark, por exemplo `exclude_ids: [stem-1605]`. A exclusão é aplicada antes de `limit`, vale para todos os modelos e formulações e fica registrada nos resultados e na identidade de retomada. IDs inexistentes são erro.
-
-`concurrency` define o máximo de pedidos HTTP simultâneos: o valor do modelo tem
-prioridade sobre o global. Se ambos forem omitidos ou `null`, o padrão é 64 para
-`base`/`instruct` e 8 para `api`. O valor deve ser um inteiro positivo.
-`server.args.max_num_seqs` controla separadamente o limite de sequências do vLLM.
-Mover o mesmo valor de `concurrency` entre modelo e topo preserva a retomada;
-alterar o valor efetivo invalida as amostras daquele modelo.
-
-### Fila de checkpoints em várias GPUs
-
-Defina `gpus` no topo do YAML e liste os checkpoints exportados no formato Hugging Face
-(pesos, configuração e tokenizer). Exemplo completo: [checkpoints_multigpu.yaml](./configs/checkpoints_multigpu.yaml).
-
-```yaml
-experiment: checkpoints_treino
-concurrency: 128
-gpus: [0, 1]
-server:
-  mode: local
-  port: 8000
+  executable: /home/your-user/.venvs/pt-lm-eval-vllm/bin/vllm
   args:
-    tensor_parallel_size: 1
-    max_num_seqs: 128
-models:
-  - {name: /caminho/treino/checkpoint-1000, type: base, label: step-1000}
-  - {name: /caminho/treino/checkpoint-2000, type: base, label: step-2000}
-  - {name: /caminho/treino/checkpoint-3000, type: base, label: step-3000}
-benchmarks: [enem, oab_exams]
+    max_model_len: 4096
+    max_num_seqs: 64
+    max_num_batched_tokens: 8192
+    gpu_memory_utilization: 0.85
+    enable_chunked_prefill: true
+    enable_prefix_caching: true
 ```
 
-```bash
-pt-lm-eval run configs/checkpoints_multigpu.yaml --dry-run
-pt-lm-eval run configs/checkpoints_multigpu.yaml
-```
+| vLLM option | What to tune |
+| --- | --- |
+| `max_num_seqs` | Maximum sequences per scheduler step. Try raising it for throughput or lowering it when the KV cache is under pressure. |
+| `max_num_batched_tokens` | Token budget per scheduler step. With chunked prefill, larger budgets can improve throughput while smaller budgets can reduce the time between generated tokens. |
+| `gpu_memory_utilization` | GPU memory budget. Raise it when unused VRAM can give the KV cache more room and reduce preemptions. |
+| `max_model_len` | Total context per request. Keep enough room for the prompt and generated tokens, and check it with `--dry-run`. |
+| `enable_chunked_prefill` | Splits long prompts into chunks so the scheduler can interleave them with generation. |
+| `enable_prefix_caching` | Reuses cached KV states for identical prompt prefixes to reduce prompt processing time. |
+| `tensor_parallel_size` | Shards one model across GPUs. More shards can free memory per GPU and add synchronization overhead. Use `1` with the harness's `gpus` queue. |
+| `dtype`, `quantization` | Change precision or use a supported quantized checkpoint. Measure scores as well as speed when comparing precision settings. |
+| `enforce_eager` | Disables CUDA graphs and compilation when set to `true`. Useful for startup troubleshooting and typically slower for sustained inference. |
 
-A GPU 0 começa o primeiro checkpoint e a GPU 1 começa o segundo. A primeira que
-terminar todos os benchmarks desliga seu vLLM e recebe o terceiro checkpoint.
-Cada GPU tem um processo avaliador e uma porta própria (`server.port + posição na lista`).
-`concurrency` vale **por modelo ativo**: duas GPUs com 128 podem enviar até 256 pedidos
-simultâneos no total. `max_num_seqs` também vale por servidor.
+The harness passes `true` as a flag and omits `false`. Use the explicit disable flag listed by your installed `vllm serve --help` and set its YAML key to `true`. [vLLM engine arguments](https://docs.vllm.ai/en/latest/configuration/engine_args/) · [vLLM optimization guide](https://docs.vllm.ai/en/latest/configuration/optimization/)
 
-Escolha GPUs disponíveis: a fila reserva somente as GPUs listadas dentro desta execução,
-sem detectar ou bloquear o uso por outros programas. Aceita índices e UUIDs `GPU-…`/`MIG-…`.
-Se `CUDA_VISIBLE_DEVICES=2,3`, use `gpus: [2, 3]`, com os mesmos IDs, não `[0, 1]`.
-As portas consecutivas precisam estar livres. Funciona com `server.mode: local` ou
-`docker`; cada modelo deve caber em uma GPU, com paralelismo de tensor, pipeline e dados
-igual a 1. Modelos com `base_url` não entram nessa fila.
+`concurrency` controls how many requests the harness sends at once. Start with the example values, then vary one setting at a time. Keep the model, sample, and generation settings fixed and use a new `experiment` name for each trial so it runs fresh. Compare `duration_seconds` in the results CSV.
 
-Os arquivos de resultados continuam separados por modelo. Use labels únicos; nomes que
-resultariam no mesmo diretório são rejeitados. O coordenador consolida o CSV ao final,
-inclusive quando há falhas ou cancelamento. Uma falha em um checkpoint é registrada e
-a fila continua; no final, o comando retorna erro se algum modelo falhou.
-O terminal mostra as alocações e conclusões. Para acompanhar os benchmarks, consulte
-`output/<experimento>/logs/<modelo>.eval.log`; o log do servidor continua em `.vllm.log`.
-O arquivo `.worker.json` registra GPU, porta e configuração efetiva do checkpoint.
+## Saving and Resuming Results
 
-`Ctrl+C` ou `SIGTERM` no coordenador encerra os workers e aguarda o desligamento dos
-servidores. Reexecute o mesmo YAML para retomar as amostras já salvas. Mudar apenas
-`gpus` não invalida a retomada. Mantenha cada checkpoint em uma pasta imutável: substituir
-os pesos no mesmo caminho não muda a identidade usada pelo cache de resultados.
-A lista é lida ao iniciar a execução; novos checkpoints exigem atualizar o YAML e rodar
-novamente. Sem `gpus` (ou com `gpus: null`), o comportamento continua sequencial.
+Runs write to `output/<experiment>/` by default. The CSV compares models, `*.results.json` stores metrics, and `*.samples.jsonl` records prompts, responses, and scores per item. Run the same command with the same configuration to resume an interrupted run.
 
-### Cenários: modelos base e instruct
+## Contributing
 
-As avaliações não se escolhem no YAML: vêm do `type` do modelo e do que cada benchmark
-declara.
+See the contribution guide for the package layout, development setup, and steps for adding and validating a benchmark. [Contributing guide](CONTRIBUTING.md)
 
-| | Modelos base (`type: base`) | Modelos instruct (`type: instruct` ou `api`) |
-|---|---|---|
-| Como | log-likelihood, sem chat template | geração com chat template |
-| Avaliações | `mcf` (opções no prompt), `cf` (texto das opções) | `gen` (extração da letra), `ifeval` |
-| Métrica principal | `acc` (MCF); `acc_norm` (CF, normalização fixada pelo benchmark) | `acc`; IFEval: `prompt_level_strict_acc` |
+Open the repository root in Codex or Claude Code to load the shared project guide. [AGENTS.md](AGENTS.md)
 
-Todo resultado de múltipla escolha traz `random_baseline` (acerto esperado chutando) para
-comparar com o do modelo. Benchmarks sem avaliação para o cenário (ex.: IFEval num modelo
-base) aparecem no plano como "não se aplica".
+## License
 
-### Benchmarks disponíveis
-
-| Benchmark | O que mede | Itens | Fonte |
-|-----------|------------|------:|-------|
-| `enem` | ENEM 2022–2024, 5 alternativas | 537 | `maritaca-ai/enem` |
-| `oab_exams` | Exame da OAB, 2010–2018 | 2.210 | `eduagarcia/oab_exams` |
-| `mmmlu_pt_br` | MMLU traduzido profissionalmente (OpenAI) | 14.042 | `openai/MMMLU` |
-| `global_mmlu_pt` | MMLU traduzido e revisado (Cohere) | 14.042 | `CohereLabs/Global-MMLU` |
-| `mmlu_prox_pt` | MMLU-ProX completo em português, 3–10 alternativas | 11.759 | `li-lab/MMLU-ProX` |
-| `global_piqa_nonparallel_pt_br` | Senso comum cultural brasileiro, 2 alternativas | 100 | `mrlbenchmarks/global-piqa-nonparallel` |
-| `belebele_pt` | Compreensão de leitura (FLORES) | 900 | `facebook/belebele` |
-| `mmlu_pt_undergraduate` | Vestibulares e concursos, graduação | 19.319 | `mmlu-pt/mmlu-pt-undergraduate-full` |
-| `mmlu_pt_undergraduate_hard` | Idem, subconjunto difícil | 11.184 | `mmlu-pt/mmlu-pt-undergraduate-hard` |
-| `mmlu_pt_high_school` | Vestibulares e olimpíadas, ensino médio | 7.187 | `mmlu-pt/mmlu-pt-high-school-full` |
-| `mmlu_pt_high_school_hard` | Idem, subconjunto difícil | 2.029 | `mmlu-pt/mmlu-pt-high-school-hard` |
-| `mmlu_pt_sintetico` | Questões no estilo MMLU geradas por modelo | 11.791 | `cemig-ceia/benchmark_Qwen3-235B-A22B_MMLU_v2` |
-| `energy_regulacao` | Regulação do setor elétrico (ANEEL) | 500 | `cemig-ceia/energy-eval` |
-| `ifeval_pt` | Seguimento de instruções verificáveis | 535 | `gap-ufg/Portuguese-IFEval` |
-
-A comparação dos melhores checkpoints Qwen/Nemotron com seus originais, Tucano2 e
-Qwen3-4B-Base nos três benchmarks adicionais está em
-[`configs/cpt_multilingual_pt.yaml`](configs/cpt_multilingual_pt.yaml). Usa conjuntos completos,
-zero-shot e MCF/CF; Global PIQA seleciona exclusivamente `por_latn_braz` de **nonparallel**.
-
-Para ver os prompts sem chamar modelo e validar um benchmark inteiro:
-
-```bash
-pt-lm-eval benchmarks preview enem -n 2
-pt-lm-eval benchmarks check enem
-```
-
-### vLLM gerenciado
-
-Por padrão, o framework sobe um vLLM para cada modelo. As flags do `vllm serve` vão em
-`server.args` (snake_case), e cada modelo pode somar as suas em `server_args`:
-
-```yaml
-server:
-  mode: local                    # local (processo) ou docker
-  port: 8000
-  args: {max_model_len: 8192, gpu_memory_utilization: 0.95}
-```
-
-Para escolher a GPU, use `CUDA_VISIBLE_DEVICES=N pt-lm-eval run …`. No modo `docker`,
-informe `server.image`; o cache do Hugging Face (`HF_HUB_CACHE`) e as GPUs visíveis são
-repassados ao container.
-
-### Modelos de raciocínio
-
-Com `thinking`, o mesmo modelo pode ser avaliado com e sem raciocínio; cada modo vira uma
-linha no relatório (`modelo:thinking` e `modelo:no-thinking`):
-
-```yaml
-models:
-  - name: Qwen/Qwen3-30B-A3B
-    type: instruct
-    thinking: true
-    server_args: {reasoning_parser: qwen3, max_model_len: 32768}
-    generate: {max_tokens: 16384}
-  - {name: Qwen/Qwen3-30B-A3B, type: instruct, thinking: false}
-```
-
-O raciocínio é separado da resposta antes da pontuação e fica registrado na amostra.
-
-### APIs e servidores existentes
-
-Modelos de API são avaliados por geração. A chave vem de uma variável de ambiente:
-
-```yaml
-models:
-  - name: gpt-5.4-mini
-    type: api
-    base_url: https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
-    generate: {reasoning_effort: low, temperature: null}
-```
-
-Um servidor OpenAI-compatível que já está no ar é usado com `base_url`, sem subir vLLM:
-
-```yaml
-models:
-  - {name: Qwen/Qwen3-4B-Instruct-2507, type: instruct, base_url: "http://127.0.0.1:8000/v1"}
-```
-
-## Dicas de uso
-
-- **Rode `--dry-run` antes.** Além do plano, ele mede cada prompt com o tokenizer do modelo e
-  aponta quantos itens não cabem no `max_model_len` (na geração, prompt + `max_tokens`). Ajuste
-  `max_model_len`, `num_fewshot` ou `max_tokens` no YAML; nada é cortado sem você saber.
-- **Teste de sanidade.** Assim que o modelo sobe, o framework faz um pedido de cada tipo que
-  ele vai usar. Se o servidor não sobe ou o teste falha, o modelo é pulado com o motivo no
-  log, os demais seguem e a execução termina com erro listando os pulados.
-- **Modelos de raciocínio precisam de `max_tokens` grande.** A métrica `truncated` mostra
-  quantas respostas foram cortadas pelo limite.
-
-## Salvando resultados e retomando
-
-Os resultados ficam em `<output_dir>/<experiment>/`:
-
-| Arquivo | Conteúdo |
-|---------|----------|
-| `<modelo>/<benchmark>.<avaliação>.samples.jsonl` | uma linha por item: prompts, few-shot, logprobs ou resposta, métricas |
-| `<modelo>/<benchmark>.<avaliação>.results.json` | métricas agregadas (média ± erro-padrão, por matéria), configuração e tempo |
-| `<experiment>.csv` | uma linha por modelo, uma coluna por benchmark@versão\|avaliação\|métrica |
-| `logs/<modelo>.vllm.log` | log do vLLM |
-| `experiment.yaml` | cópia da configuração usada |
-
-A média principal é sobre os itens, como no lm-eval; a média entre matérias fica em
-`metrics_macro`.
-
-> [!TIP]
-> Uma execução interrompida retoma de onde parou: basta rodar o mesmo comando. As amostras
-> só são reaproveitadas se a configuração for a mesma (modelo, benchmark e versão, prompts,
-> few-shot, seed); se algo mudou, o passo recomeça.
-
-## Contribuindo
-
-Para começar, instale as dependências de desenvolvimento e rode os testes:
-
-```bash
-uv pip install -e ".[dev,ifeval]"
-pytest                          # testes rápidos, sem GPU nem rede
-pytest -m network               # baixa os datasets e confere a trava dos prompts
-```
-
-O guia [CONTRIBUTING.md](./CONTRIBUTING.md) explica a estrutura do código e como adicionar
-um benchmark (uma pasta em `src/pt_lm_eval/benchmarks/` com `benchmark.py` e `card.md`) ou
-uma avaliação.
-
-### Implementando novos benchmarks
-
-Ao decidir prompts e detalhes de avaliação, seguimos esta ordem de prioridade:
-
-1. Se há uma implementação de referência oficial (do autor do dataset), seguimos a dela e
-   comparamos item a item.
-2. Se o lm-eval ou o lighteval já implementam o benchmark, conferimos a paridade dos itens
-   com eles.
-3. Seguimos o guia de avaliação do OpenEvals para formulação e métricas (base por
-   log-likelihood, instruct por geração).
-4. Prompts em português seguem o formato único de `evaluations/prompts.py`; mudar um prompt
-   exige aumentar a versão do benchmark.
-
-Não alteramos os datasets: defeitos encontrados são documentados no cartão do benchmark.
-
-## Extras opcionais
-
-Os extras são instalados com `uv pip install -e ".[NOME]"`.
-
-| NOME | Descrição |
-|------|-----------|
-| `ifeval` | IFEval em português (spaCy com `pt_core_news_sm`, langdetect, nltk) |
-| `dev` | Testes e lint (pytest, ruff) |
-| `lm-eval` | lm-evaluation-harness, para gerar as referências dos testes de paridade |
-| `gpu` | PyTorch, para o teste que compara o log-likelihood do vLLM com o transformers |
-
-## Licença
-
-Apache-2.0. Trechos portados mantêm o aviso original: a tokenização de pares, do
-lm-evaluation-harness (MIT), e os verificadores do IFEval, do Portuguese-IFEval (Apache-2.0).
+Licensed under Apache-2.0. [License](LICENSE) · [Third-party notices](src/pt_lm_eval/NOTICE)

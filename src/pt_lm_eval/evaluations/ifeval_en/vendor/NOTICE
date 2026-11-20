@@ -1,0 +1,3 @@
+IFEval checkers: Copyright 2023 The Google Research Authors, Apache-2.0 (headers retained).
+Supporting utilities: Copyright (c) 2020 EleutherAI, MIT; see LICENSE-MIT.
+Package imports are relative and protocol integration belongs to pt-lm-eval.

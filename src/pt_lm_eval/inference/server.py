@@ -1,10 +1,3 @@
-"""Endpoint de cada modelo: uma URL existente ou um vLLM gerenciado (processo local ou Docker).
-
-Todo endpoint é um context manager que devolve a base URL; um vLLM sobe ao entrar e cai
-ao sair. Antes de subir, recusa porta ocupada; depois de pronto, confere que serve o
-modelo pedido (senão o /health de outro serviço passaria pelo nosso).
-"""
-
 from __future__ import annotations
 
 import json
@@ -74,6 +67,8 @@ class ExternalEndpoint(Endpoint):
 class VLLMServer(Endpoint):
     """Um vLLM que este processo sobe e derruba; subclasses dizem como iniciar e parar."""
 
+    bind_host = HOST
+
     def __init__(
         self,
         model: str,
@@ -108,7 +103,7 @@ class VLLMServer(Endpoint):
             "serve",
             self.model,
             "--host",
-            "0.0.0.0",
+            self.bind_host,
             "--port",
             str(self.port),
             "--served-model-name",
@@ -212,6 +207,7 @@ class DockerVLLM(VLLMServer):
     """vLLM num container (`server.image`), com o cache do HF e as GPUs visíveis repassados."""
 
     ENV = ("CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "HF_TOKEN", "HF_HUB_CACHE")
+    bind_host = "0.0.0.0"  # dentro do contêiner; a porta no host fica no loopback
     _container: str | None = None
 
     def _start(self, cmd: list[str], log: BinaryIO) -> None:
@@ -219,7 +215,7 @@ class DockerVLLM(VLLMServer):
             raise ValueError("server.image é obrigatório no modo docker")
         gpu = os.environ.get("PT_LM_EVAL_GPU")
         devices = f"device={gpu}" if gpu is not None else "all"
-        docker = ["docker", "run", "--rm", "-d", "--gpus", devices, "-p", f"{self.port}:{self.port}"]
+        docker = ["docker", "run", "--rm", "-d", "--gpus", devices, "-p", f"{HOST}:{self.port}:{self.port}"]
         if cache := os.environ.get("HF_HUB_CACHE"):
             docker += ["-v", f"{cache}:{cache}"]
         if Path(self.model).exists():  # checkpoint local: monta e usa o caminho absoluto
@@ -228,9 +224,7 @@ class DockerVLLM(VLLMServer):
             cmd = [cmd[0], path, *cmd[2:]]
         # O Docker remapeia a GPU selecionada: o índice do host não vale dentro do container.
         env_names = self.ENV if gpu is None else ("HF_TOKEN", "HF_HUB_CACHE")
-        docker += [
-            arg for var in env_names if var in os.environ for arg in ("-e", f"{var}={os.environ[var]}")
-        ]
+        docker += [arg for var in env_names if var in os.environ for arg in ("-e", var)]
         docker += ["--entrypoint", "vllm", self.image, *cmd]
         self._container = subprocess.run(docker, capture_output=True, text=True, check=True).stdout.strip()
         subprocess.Popen(["docker", "logs", "-f", self._container], stdout=log, stderr=subprocess.STDOUT)

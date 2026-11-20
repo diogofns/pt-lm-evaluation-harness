@@ -1,16 +1,5 @@
-"""As instruções verificáveis do Portuguese-IFEval, uma classe por instrução.
-
-Portado de ark-aiml-research/Portuguese-IFEval (instructions/pt_instructions.py,
-instruction_utils/pt_instructions_util.py e evaluation_main.py, commit a8d8b3c), que
-deriva do IFEval da Google Research e do M-IFEval. Licença Apache-2.0, Copyright 2024
-The Google Research Authors. Como na referência, cada instrução é uma classe que recebe
-os parâmetros e verifica uma resposta; a semântica de cada uma é a da referência,
-inclusive as esquisitices (palavras-chave como regex cru, nltk em inglês em
-CapitalWordFrequency), para que o mesmo texto receba o mesmo veredito
-(tests/test_parity_ifeval_pt.py). Diferença deliberada: o langdetect tem semente fixa.
-
-Dependências (extra `ifeval`): spaCy com `pt_core_news_sm`, langdetect e nltk.
-"""
+# Adapted from ark-aiml-research/Portuguese-IFEval at a8d8b3c.
+# Copyright 2024 The Google Research Authors. Licensed under Apache-2.0.
 
 from __future__ import annotations
 
@@ -95,7 +84,9 @@ def _nlp() -> Any:
         import spacy
     except ImportError as exc:
         raise RuntimeError("o IFEval PT requer o extra: uv pip install -e '.[ifeval]'") from exc
-    nlp = spacy.load("pt_core_news_sm", disable=["tagger", "parser", "ner"])
+    # O lematizador do modelo não é usado pelos verificadores. Excluí-lo evita carregar
+    # suas árvores editadas, incompatíveis com Pydantic 2.14, sem mudar a tokenização.
+    nlp = spacy.load("pt_core_news_sm", disable=["tagger", "parser", "ner"], exclude=["lemmatizer"])
     if "sentencizer" not in nlp.pipe_names:
         nlp.add_pipe("sentencizer")
     return nlp

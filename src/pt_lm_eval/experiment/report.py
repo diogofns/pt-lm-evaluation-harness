@@ -1,10 +1,3 @@
-"""Resultados (`*.results.json`), amostras (`*.samples.jsonl`), estatística e o CSV do experimento.
-
-Cada amostra guarda o que é preciso para auditar um número (prompts, continuações,
-few-shot, métricas, logprobs ou resposta); o resultado agrega as amostras e registra
-como reproduzi-las. O CSV é reconstruído de todos os resultados do experimento.
-"""
-
 from __future__ import annotations
 
 import csv
@@ -38,6 +31,17 @@ def describe_requests(requests: Sequence[Request]) -> dict[str, Any]:
     out: dict[str, Any] = {"prompts": prompts}
     if continuations := [r.continuation for r in requests if hasattr(r, "continuation")]:
         out["continuations"] = continuations
+    if generation := [
+        {
+            "max_tokens": r.max_tokens,
+            "stop": list(r.stop),
+            "params": r.params,
+            **({"enforce_generation_config": True} if r.enforce_generation_config else {}),
+        }
+        for r in requests
+        if hasattr(r, "max_tokens")
+    ]:
+        out["generation"] = generation
     if messages := [list(r.messages) for r in requests if getattr(r, "messages", None)]:
         out["messages"] = messages
     return out
@@ -47,7 +51,7 @@ def describe_requests(requests: Sequence[Request]) -> dict[str, Any]:
 
 
 def mean_stderr(values: Sequence[float]) -> tuple[float, float]:
-    """Média e erro-padrão da média (desvio-padrão amostral / √n), como no lm-eval."""
+    """Média e erro-padrão da média (desvio-padrão amostral / √n), sobre os itens."""
     return weighted_mean_stderr(values, [1.0] * len(values))
 
 
@@ -80,8 +84,10 @@ def macro_mean_stderr(groups: Sequence[Sequence[float]]) -> tuple[float, float]:
     return mean, math.sqrt(pooled_var * sum(1 / len(g) for g in groups)) / k
 
 
-def aggregate(records: list[dict], cf_normalization: str = "char") -> dict[str, Any]:
-    """Média ± stderr de cada métrica sobre os itens (micro), como o `weight_by_size` do lm-eval.
+def aggregate(
+    records: list[dict], cf_normalization: str = "char", *, group_by_task: bool = False
+) -> dict[str, Any]:
+    """Média ± stderr de cada métrica sobre os itens (micro), ponderada pelo tamanho das subtarefas.
 
     Com várias matérias, a média entre matérias fica em `metrics_macro` e cada uma em
     `by_subject`. No CF, `acc_norm` repete a normalização fixada pelo benchmark.
@@ -90,8 +96,31 @@ def aggregate(records: list[dict], cf_normalization: str = "char") -> dict[str, 
     for r in records:
         by_subject[r.get("subject") or "(sem matéria)"].append(r)
     micro = _mean_metrics(records, cf_normalization)
+    task_results = {}
+    if group_by_task:
+        by_task: dict[str, list[dict]] = defaultdict(list)
+        for record in records:
+            by_task[record.get("task_group") or record.get("subject") or "(sem matéria)"].append(record)
+        task_results = {
+            task: {"n": len(rs), **_mean_metrics(rs, cf_normalization)}
+            for task, rs in sorted(by_task.items())
+        }
+        # Variância combinada dentro das subtarefas. Atribuição MIT em NOTICE.
+        for metric in _metric_names(records):
+            groups = [[r["metrics"][metric] for r in rs if metric in r["metrics"]] for rs in by_task.values()]
+            groups = [values for values in groups if values]
+            n = sum(map(len, groups))
+            degrees = n - len(groups)
+            # Um grupo de um item contribui zero para a soma de quadrados e para os graus de liberdade.
+            spread = sum(
+                (len(values) - 1) * len(values) * mean_stderr(values)[1] ** 2
+                for values in groups
+                if len(values) > 1
+            )
+            micro[f"{metric}_stderr"] = math.sqrt(spread / degrees / n) if degrees else math.nan
+        micro = _with_acc_norm(micro, cf_normalization)
     if len(by_subject) == 1:
-        return {"metrics": micro}
+        return {"metrics": micro, **({"by_task": task_results} if group_by_task else {})}
     macro: dict[str, float] = {}
     for name in _metric_names(records):
         groups = [[r["metrics"][name] for r in rs if name in r["metrics"]] for rs in by_subject.values()]
@@ -103,6 +132,7 @@ def aggregate(records: list[dict], cf_normalization: str = "char") -> dict[str, 
         "metrics": micro,
         "metrics_macro": _with_acc_norm(macro, cf_normalization),
         "by_subject": subjects,
+        **({"by_task": task_results} if group_by_task else {}),
     }
 
 
@@ -116,7 +146,7 @@ def _mean_metrics(records: list[dict], cf_normalization: str) -> dict[str, float
 
 
 def _with_acc_norm(metrics: dict[str, float], cf_normalization: str) -> dict[str, float]:
-    source = f"acc_{cf_normalization}"
+    source = "acc_bytes" if cf_normalization == "byte" else f"acc_{cf_normalization}"
     if source not in metrics:
         return metrics
     return {**metrics, "acc_norm": metrics[source], "acc_norm_stderr": metrics[f"{source}_stderr"]}
@@ -160,8 +190,17 @@ def build_result(
             "name": step.evaluation,
             "prompt_sha": prompt_sha,
             "num_fewshot": step.num_fewshot,
+            **(
+                {
+                    "fewshot_policy": "heldout_first_n_per_area",
+                    "reserved_fewshot_ids": list(dict.fromkeys(s for r in records for s in r["fewshot_ids"])),
+                }
+                if bench.fewshot_holdout or step.fewshot_holdout
+                else {}
+            ),
             "fewshot_as_multiturn": step.fewshot_as_multiturn,
             "cf_normalization": bench.cf_normalization,
+            **({"aggregation": "grouped_tasks"} if bench.grouped_metrics else {}),
             "seed": cfg.seed,
             "limit": step.limit,
             "exclude_ids": list(step.exclude_ids),
@@ -173,7 +212,7 @@ def build_result(
             "display_name": model.display_name,
             "server": None if model.base_url else {**asdict(cfg.server), "args": cfg.server.args_for(model)},
         },
-        **aggregate(records, bench.cf_normalization),
+        **aggregate(records, bench.cf_normalization, group_by_task=bench.grouped_metrics),
         "samples": samples_path,
     }
 
@@ -187,13 +226,18 @@ class Results:
 
     def paths(self, step: Step) -> tuple[Path, Path]:
         """(amostras, resultado) do passo, em <out_dir>/<modelo>/<benchmark>.<avaliação>.*"""
-        stem = self.out_dir / slug(step.model.display_name) / f"{slug(step.benchmark)}.{step.evaluation}"
+        from ..benchmarks import BENCHMARKS
+
+        bench = BENCHMARKS.get(step.benchmark)
+        name = f"{slug(step.benchmark)}@{bench.version}" if bench.grouped_metrics else slug(step.benchmark)
+        # Preserve samples/results from the preceding protocol in the same experiment.
+        stem = self.out_dir / slug(step.model.display_name) / f"{name}.{step.evaluation}"
         stem.parent.mkdir(parents=True, exist_ok=True)
         return Path(f"{stem}.samples.jsonl"), Path(f"{stem}.results.json")
 
     @staticmethod
     def write(result: dict[str, Any], path: Path) -> None:
-        path.write_text(json.dumps(_clean(result), ensure_ascii=False, indent=2, default=str) + "\n")
+        write_text_atomic(path, json.dumps(_clean(result), ensure_ascii=False, indent=2, default=str) + "\n")
 
     def collect(self) -> list[dict]:
         return [json.loads(p.read_text()) for p in sorted(self.out_dir.glob("*/*.results.json"))]
@@ -226,6 +270,12 @@ def package_version() -> str:
         return version("pt-lm-eval")
     except PackageNotFoundError:
         return "dev"
+
+
+def write_text_atomic(path: Path, text: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
 
 
 def _clean(value: Any) -> Any:

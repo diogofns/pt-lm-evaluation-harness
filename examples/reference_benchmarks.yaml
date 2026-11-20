@@ -1,0 +1,27 @@
+# English benchmarks for generation and multiple choice.
+# GSM8K and MMLU-Pro use their default five-shot protocols.
+experiment: reference_benchmarks
+seed: 1234
+concurrency: 64
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8150
+  args:
+    max_model_len: 32768
+    dtype: bfloat16
+    gpu_memory_utilization: 0.8
+    generation_config: vllm
+models:
+  - name: Qwen/Qwen3-4B-Instruct-2507
+    type: instruct
+    thinking: false
+    server_args: {reasoning_parser: qwen3}
+benchmarks:
+  - gpqa_main_zeroshot
+  - gpqa_diamond_zeroshot
+  - gpqa_extended_zeroshot
+  - gsm8k
+  - mmlu_pro
+  - mmlu_redux_generative
+  - ifeval

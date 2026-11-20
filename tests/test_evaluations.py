@@ -1,5 +1,3 @@
-"""Prompts, pedidos e pontuação das avaliações de múltipla escolha."""
-
 from __future__ import annotations
 
 import pytest

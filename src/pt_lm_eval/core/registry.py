@@ -1,5 +1,3 @@
-"""Registro por nome, com sugestão quando o nome não existe."""
-
 from __future__ import annotations
 
 import difflib

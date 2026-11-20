@@ -1,10 +1,5 @@
-"""pt-lm-eval: avaliador de LLMs em português.
-
-Importar o pacote registra as avaliações (evaluations/) e os benchmarks (benchmarks/).
-"""
-
 from .benchmarks import BENCHMARKS, Benchmark, ColumnBenchmark, Columns, HFDataset
-from .core import LETTERS, InstructionItem, Item, MCQItem, Scored
+from .core import LETTERS, CompletionItem, InstructionItem, Item, MCQItem, Scored
 from .evaluations import EVALUATIONS, Evaluation
 
 __all__ = [
@@ -14,6 +9,7 @@ __all__ = [
     "Benchmark",
     "ColumnBenchmark",
     "Columns",
+    "CompletionItem",
     "Evaluation",
     "HFDataset",
     "InstructionItem",

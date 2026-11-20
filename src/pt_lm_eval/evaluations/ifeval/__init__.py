@@ -1,5 +1,3 @@
-"""IFEval em português: a avaliação e as instruções do Portuguese-IFEval."""
-
 from .evaluation import InstructionFollowing
 from .instructions import INSTRUCTIONS, Instruction, follows_loose, follows_strict, instruction
 

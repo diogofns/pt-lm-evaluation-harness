@@ -1,11 +1,3 @@
-"""Configuração do experimento (YAML) e o plano modelo × benchmark × avaliação.
-
-Três partes: a geral (transversal), `models` e `benchmarks`; o que vem num modelo ou
-benchmark sobrescreve o geral. Chaves desconhecidas são erro, para pegar erros de
-digitação. As avaliações não se escolhem: vêm do `type` do modelo (guia do OpenEvals:
-base por log-likelihood, instruct e API por geração) e do que o benchmark declara.
-"""
-
 from __future__ import annotations
 
 import dataclasses
@@ -18,9 +10,14 @@ import yaml
 from ..benchmarks import BENCHMARKS
 from ..core import Item, Request
 from ..evaluations import EVALUATIONS
+from ..inference.server import slug
 
 MODEL_TYPES = ("base", "instruct", "api")
-SCENARIO = {"base": {"loglikelihood"}, "instruct": {"generate"}, "api": {"generate"}}
+SCENARIO = {
+    "base": {"loglikelihood"},
+    "instruct": {"loglikelihood", "generate"},
+    "api": {"generate"},
+}
 
 
 @dataclass(frozen=True)
@@ -33,7 +30,11 @@ class ServerConfig:
     startup_timeout: int = 1800
 
     def args_for(self, model: ModelConfig) -> dict[str, Any]:
-        return {**self.args, **model.server_args}
+        return {
+            key.replace("-", "_"): value
+            for args in (self.args, model.server_args)
+            for key, value in args.items()
+        }
 
 
 @dataclass(frozen=True)
@@ -41,11 +42,13 @@ class ModelConfig:
     name: str
     type: str  # base | instruct | api
     base_url: str | None = None  # endpoint já existente: não sobe servidor
-    api_key_env: str | None = None  # variável com a chave; padrão: OPENAI_API_KEY
+    api_key_env: str | None = None  # api.openai.com usa OPENAI_API_KEY por padrão
     tokenizer: str | None = None  # padrão: o próprio modelo (exceto api)
     add_bos: bool | None = None  # None = o que o tokenizer faz por padrão
     server_args: dict[str, Any] = field(default_factory=dict)  # somadas a server.args
     generate: dict[str, Any] = field(default_factory=dict)  # max_tokens, temperature, extras
+    override_task_sampling: bool = False  # usa temperature/top_p do modelo mesmo em tarefas com valores fixos
+    override_task_max_tokens: bool = False  # usa generate.max_tokens mesmo em tarefas com limite fixo
     system_prompt: str | None = None
     chat_template: bool | None = None  # None = sim para instruct e api, não para base
     thinking: bool | None = None  # liga/desliga o raciocínio (enable_thinking); None = padrão do modelo
@@ -56,6 +59,10 @@ class ModelConfig:
 
     def __post_init__(self) -> None:
         _validate_concurrency(self.concurrency, f"modelo {self.name}")
+        if type(self.override_task_sampling) is not bool:
+            raise ValueError(f"modelo {self.name}: override_task_sampling deve ser booleano")
+        if type(self.override_task_max_tokens) is not bool:
+            raise ValueError(f"modelo {self.name}: override_task_max_tokens deve ser booleano")
         if self.type not in MODEL_TYPES:
             raise ValueError(f"modelo {self.name}: type deve ser um de {MODEL_TYPES}")
         if self.type == "api" and not self.base_url:
@@ -91,10 +98,12 @@ class BenchmarkRun:
     fewshot_as_multiturn: bool | None = None
     limit: int | str | None = None  # None = o geral; "all" = todos os itens, mesmo com limit geral
     exclude_ids: tuple[str, ...] = ()  # exclusões explícitas, iguais para todos os modelos
+    fewshot_holdout: bool = False  # reserva primeiros N exemplos por grupo fora do eval
 
     def __post_init__(self) -> None:
-        if isinstance(self.limit, str) and self.limit != "all":
-            raise ValueError(f"benchmark {self.name}: limit deve ser um número ou 'all', veio {self.limit!r}")
+        if type(self.fewshot_holdout) is not bool:
+            raise ValueError(f"benchmark {self.name}: fewshot_holdout deve ser booleano")
+        _validate_selection(self.num_fewshot, self.limit, f"benchmark {self.name}", allow_all=True)
 
 
 @dataclass(frozen=True)
@@ -109,6 +118,7 @@ class Step:
     skip_reason: str | None = None
     fewshot_as_multiturn: bool = False  # efetivo: só com chat, geração e ao menos um exemplo
     exclude_ids: tuple[str, ...] = ()
+    fewshot_holdout: bool = False
 
     @property
     def needs(self) -> frozenset[str]:
@@ -127,7 +137,7 @@ class ExperimentConfig:
     output_dir: str = "output"
     seed: int = 1234
     limit: int | None = None  # itens por benchmark, sorteados com a seed
-    num_fewshot: int = 0
+    num_fewshot: int | None = None  # None = padrão de cada benchmark
     fewshot_as_multiturn: bool = False  # em chat: exemplos como turnos usuário/assistente
 
     concurrency: int | None = None  # padrão global; None mantém 64 no vLLM e 8 em APIs
@@ -135,6 +145,12 @@ class ExperimentConfig:
 
     def __post_init__(self) -> None:
         _validate_concurrency(self.concurrency, "experimento")
+        _validate_selection(self.num_fewshot, self.limit, "experimento")
+        names = [slug(model.display_name) for model in self.models]
+        if len(names) != len(set(names)):
+            raise ValueError("modelos compartilham o diretório de saída; defina labels únicos")
+        if any(name in {"", ".", "..", "logs"} for name in names):
+            raise ValueError("nome de saída reservado; defina um label para o modelo")
         if self.gpus is not None:
             object.__setattr__(self, "gpus", _gpu_ids(self.gpus))
             self._validate_gpu_pool()
@@ -161,7 +177,7 @@ class ExperimentConfig:
         for model in self.models:
             if model.base_url:
                 raise ValueError("gpus exige modelos com vLLM gerenciado, sem base_url")
-            args = {key.replace("-", "_"): value for key, value in self.server.args_for(model).items()}
+            args = self.server.args_for(model)
             if "port" in args:
                 raise ValueError("com gpus, configure a porta inicial em server.port, não em args")
             for key in ("tensor_parallel_size", "pipeline_parallel_size", "data_parallel_size"):
@@ -177,11 +193,17 @@ class ExperimentConfig:
         steps = []
         for model in self.models:
             for run in self.benchmarks:
+                bench = BENCHMARKS.get(run.name)
                 limit = None if run.limit == "all" else run.limit if run.limit is not None else self.limit
-                shots = self.num_fewshot if run.num_fewshot is None else run.num_fewshot
-                evaluations = [
-                    e for e in self._evaluations(run) if EVALUATIONS.get(e).needs <= SCENARIO[model.type]
-                ]
+                shots = bench.resolve_num_fewshot(run.num_fewshot, self.num_fewshot)
+                evaluations = []
+                for name in self._evaluations(run):
+                    ev = EVALUATIONS.get(name)
+                    allowed = SCENARIO[model.type]
+                    if ev.supports_base_generation or name in bench.base_generation_evaluations:
+                        allowed = allowed | {"generate"}
+                    if ev.needs <= allowed:
+                        evaluations.append(name)
                 if not evaluations:
                     steps.append(
                         Step(model, run.name, "-", shots, limit, f"não se aplica a modelos {model.type}")
@@ -197,6 +219,7 @@ class ExperimentConfig:
                             limit,
                             fewshot_as_multiturn=multiturn,
                             exclude_ids=run.exclude_ids,
+                            fewshot_holdout=run.fewshot_holdout,
                         )
                     )
         return steps
@@ -214,11 +237,11 @@ class ExperimentConfig:
     def _multiturn(self, run: BenchmarkRun, model: ModelConfig, evaluation: str, shots: int) -> bool:
         wanted = self.fewshot_as_multiturn if run.fewshot_as_multiturn is None else run.fewshot_as_multiturn
         ev = EVALUATIONS.get(evaluation)
-        if not (wanted and model.uses_chat and ev.needs == {"generate"}):
+        if not (wanted and shots > 0 and model.uses_chat and ev.needs == {"generate"}):
             return False
         if not ev.supports_multiturn:
             raise ValueError(f"{run.name}: a avaliação {evaluation} não suporta fewshot_as_multiturn")
-        return shots > 0
+        return True
 
 
 def _gpu_ids(values: Any) -> tuple[str, ...]:
@@ -246,6 +269,16 @@ def _gpu_ids(values: Any) -> tuple[str, ...]:
 def _validate_concurrency(value: int | None, where: str) -> None:
     if value is not None and (type(value) is not int or value < 1):
         raise ValueError(f"{where}: concurrency deve ser um inteiro positivo")
+
+
+def _validate_selection(shots: int | None, limit: int | str | None, where: str, *, allow_all=False) -> None:
+    if shots is not None and (type(shots) is not int or shots < 0):
+        raise ValueError(f"{where}: num_fewshot deve ser um inteiro não negativo")
+    if limit is None or (allow_all and limit == "all"):
+        return
+    if type(limit) is not int or limit < 1:
+        options = " ou 'all'" if allow_all else ""
+        raise ValueError(f"{where}: limit deve ser um inteiro positivo{options}")
 
 
 def load_config(path: str | Path) -> ExperimentConfig:
