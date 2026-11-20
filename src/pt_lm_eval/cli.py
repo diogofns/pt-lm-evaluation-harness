@@ -10,7 +10,8 @@ from pathlib import Path
 
 from .benchmarks import BENCHMARKS
 from .evaluations import EVALUATIONS
-from .experiment import Experiment, load_config
+from .experiment import Experiment
+from .experiment.config import load_profile_config
 from .experiment.report import describe_requests
 
 CARD_SECTIONS = (
@@ -28,7 +29,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pt-lm-eval")
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="executa um experimento")
-    run.add_argument("config", type=Path)
+    run.add_argument(
+        "--profile", type=Path, required=True, help="nome do perfil em profiles/models ou caminho do YAML"
+    )
+    run.add_argument("--vllm-config", type=Path, help="YAML do servidor (padrão: profiles/vllm.yaml)")
+    run.add_argument("--model", help="ID do modelo, checkpoint ou pasta de checkpoints")
+    run.add_argument("--model-type", choices=("base", "instruct"), help="sobrescreve o tipo do perfil")
+    run.add_argument(
+        "--benchmarks", nargs="+", required=True, metavar="NOME[|SHOTS]", help="benchmarks a avaliar"
+    )
+    run.add_argument("--limit", type=int, help="itens por benchmark ou subtarefa")
+    run.add_argument("--experiment", help="nome da execução (padrão: nome do perfil)")
     run.add_argument(
         "--dry-run", action="store_true", help="mostra o plano e confere se os prompts cabem no contexto"
     )
@@ -56,10 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         handler.addFilter(lambda r: r.name.startswith("pt_lm_eval") or r.levelno >= logging.WARNING)
 
     if args.command == "run":
-        experiment = Experiment(load_config(args.config), config_path=args.config)
-        if args.dry_run:
-            return 0 if experiment.dry_run() else 1
-        experiment.run()
+        return run_experiment(args, run)
     elif args.action == "list":
         for name in BENCHMARKS.names():
             b = BENCHMARKS.get(name)
@@ -71,6 +79,33 @@ def main(argv: list[str] | None = None) -> int:
         if not names:
             parser.error("informe benchmarks ou --all")
         return 0 if check_benchmarks(names, args.lock, args.update_lock) else 1
+    return 0
+
+
+def run_experiment(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    profile = args.profile
+    if profile.parent == Path(".") and profile.suffix not in {".yaml", ".yml"}:
+        profile = Path("profiles/models") / f"{profile.name}.yaml"
+    vllm_config = args.vllm_config or Path("profiles/vllm.yaml")
+    try:
+        config = load_profile_config(
+            profile,
+            vllm_config,
+            args.benchmarks,
+            model=args.model,
+            model_type=args.model_type,
+            experiment=args.experiment,
+            limit=args.limit,
+        )
+        manifest = (config.out_dir / "experiment.yaml").resolve()
+        if not args.dry_run and manifest in {profile.resolve(), vllm_config.resolve()}:
+            raise ValueError("use --experiment para salvar a nova configuração em outro diretório")
+        experiment = Experiment(config)
+    except (OSError, ValueError, KeyError) as exc:
+        parser.error(str(exc))
+    if args.dry_run:
+        return 0 if experiment.dry_run() else 1
+    experiment.run(save_resolved_config=True)
     return 0
 
 

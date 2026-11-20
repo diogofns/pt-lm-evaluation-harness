@@ -8,8 +8,11 @@ import math
 import shutil
 import time
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from ..benchmarks import BENCHMARKS
 from ..core import (
@@ -51,11 +54,15 @@ class Experiment:
 
     # --- execução -------------------------------------------------------------------
 
-    def run(self) -> None:
+    def run(self, *, save_resolved_config: bool = False) -> None:
         out = self.cfg.out_dir
         out.mkdir(parents=True, exist_ok=True)
         config_copy = out / "experiment.yaml"
-        if self.config_path and self.config_path.resolve() != config_copy.resolve():
+        if save_resolved_config:
+            write_text_atomic(
+                config_copy, yaml.safe_dump(asdict(self.cfg), sort_keys=False, allow_unicode=True)
+            )
+        elif self.config_path and self.config_path.resolve() != config_copy.resolve():
             shutil.copy(self.config_path, config_copy)
         try:
             if self.pool is not None:
@@ -252,7 +259,7 @@ class Experiment:
         )
         ok = all(c.ok for c in checks)
         if not ok:
-            print("\nAjuste max_model_len, num_fewshot ou max_tokens no YAML antes de rodar.")
+            print("\nReduza os exemplos few-shot ou max_tokens, ou aumente max_model_len.")
         return ok
 
 

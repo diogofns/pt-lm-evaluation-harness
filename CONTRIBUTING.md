@@ -31,8 +31,8 @@ PT_LM_EVAL_IFEVAL_REF=/path/to/Portuguese-IFEval pytest -m parity
 ## Repository layout
 
 ```text
-examples/          Example experiment configurations
 docs/              Configuration guide
+profiles/          Model profiles and shared vLLM settings
 src/pt_lm_eval/
   benchmarks/     Dataset loaders and benchmark cards
   core/           Items, requests, responses, and scores

@@ -68,5 +68,5 @@ Essa observação deve ser considerada na interpretação dos escores.
 
 Além de MCF, modelos instruct e APIs podem usar `gen` com instrução de resposta no
 formato `Resposta: X` em PT-BR. Os itens, níveis, gabaritos e demonstrações reservadas
-são os mesmos do MCF. A geração reporta `acc`, `extracted` e `truncated`; o modelo
-instruct recebe o chat template. Use `evaluations: [gen]` para rodar apenas geração.
+são os mesmos do MCF. A geração reporta `acc`, `extracted` e `truncated`. Com
+`--model-type instruct`, o CLI usa geração com o chat template do modelo por padrão.

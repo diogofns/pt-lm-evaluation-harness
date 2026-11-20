@@ -92,5 +92,5 @@ PT-BR, com a instrução `Responda com a letra da alternativa correta no formato
 "Resposta: X".`. A resposta é extraída pelo filtro PT-BR e reportada como `acc`,
 `extracted` e `truncated`. MCF permanece disponível e seu prompt não muda.
 A seleção de itens e exemplos few-shot é a mesma em MCF e geração, inclusive as
-reservas e exclusões aplicáveis ao dataset. Para rodar somente geração, configure
-`evaluations: [gen]`. Na geração instruct, o cliente aplica o chat template do modelo.
+reservas e exclusões aplicáveis ao dataset. Com `--model-type instruct`, o CLI usa
+geração e o cliente aplica o chat template do modelo por padrão.

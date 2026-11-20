@@ -26,7 +26,7 @@ ifeval = [  # verificadores do IFEval original e PT
     "spacy>=3.8,<3.9",
     "pt-core-news-sm @ https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.8.0/pt_core_news_sm-3.8.0-py3-none-any.whl",
 ]
-gpu = ["torch>=2.4"]  # só para o teste F0 (pytest -m gpu); o vLLM fica fora do venv
+gpu = ["torch>=2.4"]  # dependência do teste de GPU (pytest -m gpu)
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]

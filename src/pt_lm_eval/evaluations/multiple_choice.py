@@ -41,7 +41,7 @@ def extract_letter(text: str, letters: str) -> str | None:
 
 def argmax(values: Sequence[float]) -> int:
     """Índice do maior valor; em empate, o primeiro (como numpy.argmax)."""
-    return max(range(len(values)), key=lambda i: (values[i], -i))
+    return max(range(len(values)), key=values.__getitem__)
 
 
 class LoglikelihoodMCQ(Evaluation):

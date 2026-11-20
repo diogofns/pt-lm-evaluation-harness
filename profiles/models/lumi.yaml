@@ -1,0 +1,13 @@
+type: instruct
+thinking: false
+server_args:
+  trust_remote_code: true
+  reasoning_parser: nemotron_v3
+  mamba_ssm_cache_dtype: float32
+generate:
+  temperature: 0.7
+  top_p: 0.95
+  top_k: 20
+  max_tokens: 2048
+  seed: 1234
+concurrency: 512

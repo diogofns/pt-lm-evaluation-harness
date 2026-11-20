@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import dataclasses
+import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -282,10 +284,88 @@ def _validate_selection(shots: int | None, limit: int | str | None, where: str, 
 
 
 def load_config(path: str | Path) -> ExperimentConfig:
-    data = yaml.safe_load(Path(path).read_text())
+    return parse_config(_read_config(path))
+
+
+def load_profile_config(
+    profile: Path,
+    vllm_config: Path,
+    benchmarks: Sequence[str],
+    *,
+    model: str | None = None,
+    model_type: str | None = None,
+    experiment: str | None = None,
+    limit: int | None = None,
+) -> ExperimentConfig:
+    settings = _read_config(profile)
+    name = settings.get("name") if model is None else model
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"{profile}: informe --model com o ID, checkpoint ou pasta de checkpoints")
+    if model_type is not None and model_type != settings.get("type"):
+        settings["type"] = model_type
+        settings.pop("chat_template", None)
+        if model_type == "base":
+            settings.pop("thinking", None)
+    names = _checkpoint_names(name)
+    models = [{**settings, "name": candidate} for candidate in names]
+    gpus = None
+    if len(models) > 1:
+        if settings.get("base_url"):
+            raise ValueError("uma pasta de checkpoints exige vLLM gerenciado, sem base_url")
+        if label := settings.get("label"):
+            for entry in models:
+                entry["label"] = f"{label}/{Path(entry['name']).name}"
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        if visible not in {"", "-1"}:
+            gpus = [gpu.strip() for gpu in visible.split(",")]
+    return parse_config(
+        {
+            "experiment": experiment if experiment is not None else profile.stem,
+            "limit": limit,
+            "server": _read_config(vllm_config),
+            "models": models,
+            "gpus": gpus,
+            "benchmarks": _select_benchmarks(
+                benchmarks, prefer_generation=settings.get("type") == "instruct"
+            ),
+        }
+    )
+
+
+def _checkpoint_names(name: str) -> list[str]:
+    name = os.path.expanduser(name)
+    path = Path(name)
+    if not path.is_dir() or (path / "config.json").is_file():
+        return [name]
+    checkpoints = [str(child) for child in sorted(path.iterdir()) if (child / "config.json").is_file()]
+    if not checkpoints:
+        raise ValueError(f"{path}: nenhum checkpoint com config.json nesta pasta ou nas subpastas diretas")
+    return checkpoints
+
+
+def _read_config(path: str | Path) -> dict[str, Any]:
+    try:
+        data = yaml.safe_load(Path(path).read_text())
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: YAML inválido: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"{path}: o YAML precisa ser um objeto")
-    return parse_config(data)
+    return data
+
+
+def _select_benchmarks(selectors: Sequence[str], *, prefer_generation: bool) -> list[dict[str, Any]]:
+    selected: dict[str, dict[str, Any]] = {}
+    for spec in selectors:
+        name, sep, shots = spec.partition("|")
+        if not name or (sep and not shots.isdecimal()):
+            raise ValueError(f"benchmark inválido {spec!r}: use nome ou 'nome|shots' com shots >= 0")
+        if name in selected:
+            raise ValueError(f"benchmark {name!r} repetido em --benchmarks")
+        run: dict[str, Any] = {"name": name, "num_fewshot": int(shots) if sep else None}
+        if prefer_generation and "gen" in BENCHMARKS.get(name).evaluations:
+            run["evaluations"] = ["gen"]
+        selected[name] = run
+    return list(selected.values())
 
 
 def parse_config(data: dict[str, Any]) -> ExperimentConfig:

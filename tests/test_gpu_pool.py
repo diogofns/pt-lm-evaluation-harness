@@ -259,7 +259,7 @@ def test_docker_selects_single_gpu_without_host_index_inside(tmp_path, monkeypat
 
 
 def test_real_coordinator_cancellation_stops_servers_during_startup(tmp_path, monkeypatch):
-    """CLI → workers → servidores locais reais (simulados), cancelados antes do /health."""
+    """Cancela os servidores locais simulados antes de responderem a /health."""
     import time
     from dataclasses import asdict
     from pathlib import Path
@@ -288,11 +288,20 @@ while True:
     cfg = config(tmp_path, server=ServerConfig(executable=str(executable), port=28100))
     path = tmp_path / "experiment.json"
     path.write_text(json.dumps(asdict(cfg)))
+    coordinator = """
+import sys
+from pathlib import Path
+
+from pt_lm_eval.experiment import Experiment, load_config
+
+path = Path(sys.argv[1])
+Experiment(load_config(path), config_path=path).run()
+"""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
     with (tmp_path / "coordinator.log").open("wb") as fh:
         process = subprocess.Popen(
-            [sys.executable, "-m", "pt_lm_eval.cli", "run", str(path)],
+            [sys.executable, "-c", coordinator, str(path)],
             env=env,
             stdout=fh,
             stderr=subprocess.STDOUT,

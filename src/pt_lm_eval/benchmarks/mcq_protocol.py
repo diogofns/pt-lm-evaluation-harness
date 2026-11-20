@@ -15,7 +15,7 @@ class GroupedMCQMixin:
 
     grouped_metrics = True
     fewshot_sampler = "first_n"
-    exclude_eval_from_shots = False
+    exclude_eval_from_shots = False  # usado pelo sampler first_n
 
     @staticmethod
     def task_key(item: MCQItem) -> str:
@@ -58,11 +58,7 @@ class GroupedMCQMixin:
                 shots = candidates[:k]
             else:
                 rnd = rngs.setdefault(key, random.Random(seed))
-                shots = rnd.sample(pool, k + int(self.exclude_eval_from_shots))
-                if self.exclude_eval_from_shots:
-                    shots = [p for p in shots if not _same_doc(p, item)][:k]
-                    if len(shots) < k:
-                        shots = rnd.sample([p for p in pool if not _same_doc(p, item)], k)
+                shots = rnd.sample(pool, k)
             result[item.id] = shots
         return result
 

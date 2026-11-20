@@ -534,9 +534,9 @@ def test_dry_run_reports_failure_to_the_shell(monkeypatch):
     cfg = parse_config(
         {"experiment": "x", "models": [{"name": "m", "type": "instruct"}], "benchmarks": ["_contexto_teste"]}
     )
-    monkeypatch.setattr("pt_lm_eval.cli.load_config", lambda path: cfg)
+    monkeypatch.setattr("pt_lm_eval.cli.load_profile_config", lambda *args, **kwargs: cfg)
     monkeypatch.setattr(Experiment, "dry_run", lambda self: False)
-    assert main(["run", "exemplo.yaml", "--dry-run"]) == 1
+    assert main(["run", "--profile", "test", "--benchmarks", "_contexto_teste", "--dry-run"]) == 1
 
 
 def test_generation_error_does_not_count_as_an_answer_and_is_retried(tmp_path):
