@@ -18,7 +18,7 @@ jobs:
       - run: .venv/bin/pytest
 
   benchmarks:
-    # Só quando benchmarks ou a trava mudam: baixa os datasets e valida tudo.
+    # Validate benchmark changes and changes to this workflow.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,20 +33,31 @@ jobs:
               - 'src/pt_lm_eval/core/**'
               - 'src/pt_lm_eval/evaluations/**'
               - 'benchmarks.lock.json'
+              - '.github/workflows/ci.yml'
       - uses: astral-sh/setup-uv@v5
         if: steps.mudou.outputs.benchmarks == 'true'
-      - name: Validar benchmarks (dados, prompts, cartão, versão)
+      - name: Install benchmark validation dependencies
         if: steps.mudou.outputs.benchmarks == 'true'
-        run: |
-          uv venv --python 3.12 && uv pip install -e ".[dev,ifeval]"
-          .venv/bin/pt-lm-eval benchmarks check --all
-      - name: Publicar prompts para revisão
+        run: uv venv --python 3.12 && uv pip install -e ".[dev,ifeval]"
+      - name: Validate benchmarks and preview public prompts
         if: steps.mudou.outputs.benchmarks == 'true'
+        env:
+          HF_TOKEN: ${{ github.event_name == 'push' && secrets.HF_TOKEN || '' }}
+        shell: bash
         run: |
-          echo '## Prompts renderizados (2 itens por benchmark)' >> "$GITHUB_STEP_SUMMARY"
-          for b in $(.venv/bin/pt-lm-eval benchmarks list | awk '{print $1}'); do
-            echo "### $b" >> "$GITHUB_STEP_SUMMARY"
+          mapfile -t public_benchmarks < <(.venv/bin/pt-lm-eval benchmarks list | awk '$1 !~ /^gpqa_/ {print $1}')
+          if [[ -n "$HF_TOKEN" ]]; then
+            .venv/bin/pt-lm-eval benchmarks check --all
+          else
+            echo '::notice::GPQA requires a Hugging Face token with dataset access. Set HF_TOKEN to validate it on pushes to main.'
+            .venv/bin/pt-lm-eval benchmarks check "${public_benchmarks[@]}"
+          fi
+          unset HF_TOKEN
+
+          echo '## Rendered prompts (2 items per public benchmark)' >> "$GITHUB_STEP_SUMMARY"
+          for benchmark in "${public_benchmarks[@]}"; do
+            echo "### $benchmark" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            .venv/bin/pt-lm-eval benchmarks preview "$b" -n 2 >> "$GITHUB_STEP_SUMMARY"
+            .venv/bin/pt-lm-eval benchmarks preview "$benchmark" -n 2 >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           done

@@ -83,6 +83,8 @@ pt-lm-eval benchmarks check my_benchmark
 
 Bump the benchmark version before updating the lock if you change its dataset revision, item conversion, or prompts. Add local test cases for the behavior you changed. Run a small evaluation and inspect the resulting `*.samples.jsonl` before opening a pull request.
 
+CI checks public benchmarks and previews their prompts on pull requests. To include GPQA validation on pushes to `main`, set the repository's `HF_TOKEN` Actions secret to a read token from a Hugging Face account with access to GPQA.
+
 ## Adding an evaluation
 
 Subclass `Evaluation` and define `name`, `item_type`, and `needs` (`loglikelihood` or `generate`). Implement `build(item, shots, multiturn=False)` and `score(item, responses)`, then import the class in `evaluations/__init__.py` to register it. Use `Scored.weights` for per-item metric weights and bump `scoring_version` when scoring changes so previous samples are rescored. [Multiple-choice implementations](src/pt_lm_eval/evaluations/multiple_choice.py)
