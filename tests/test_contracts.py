@@ -1,17 +1,18 @@
-"""Toda avaliação e todo benchmark registrados cumprem o contrato."""
-
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from pt_lm_eval import BENCHMARKS, EVALUATIONS, InstructionItem, MCQItem
+from pt_lm_eval import BENCHMARKS, EVALUATIONS, CompletionItem, InstructionItem, MCQItem
 from pt_lm_eval.cli import card_problems, check_benchmarks
 from pt_lm_eval.core import GenerateResponse, LoglikelihoodResponse
 
 # Um exemplo por tipo de item; cada avaliação é testada com o tipo que declara.
 EXAMPLES = {
+    CompletionItem: CompletionItem(
+        id="g", prompt="Question: 2+2?\nAnswer:", target="#### 4", protocol="gsm8k"
+    ),
     MCQItem: MCQItem(id="q", question="Quanto é 2 + 2?", options=("3", "4", "5", "6"), gold=1, subject="mat"),
     InstructionItem: InstructionItem(
         id="i", prompt="Escreva sem vírgulas.", instruction_ids=("pt:punctuation:no_comma",), kwargs=({},)
@@ -23,7 +24,11 @@ EXAMPLES = {
 def test_evaluation_builds_declared_requests_and_scores_floats(name):
     ev = EVALUATIONS.get(name)
     item = EXAMPLES[ev.item_type]
-    for shots in ([], [item]):
+    if name == "ifeval_en":
+        item = InstructionItem(
+            id="i", prompt="Use no commas.", instruction_ids=("punctuation:no_comma",), kwargs=({},)
+        )
+    for shots in ([], [item]) if ev.supports_fewshot else ([],):
         requests = ev.build(item, shots)
         assert requests and {r.kind for r in requests} <= ev.needs
         fake = [

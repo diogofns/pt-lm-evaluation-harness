@@ -1,5 +1,3 @@
-"""Classe base das avaliações: transformam itens em pedidos e pontuam as respostas."""
-
 from __future__ import annotations
 
 import inspect
@@ -23,6 +21,8 @@ class Evaluation(ABC):
     item_type: ClassVar[type[Item]]
     needs: ClassVar[frozenset[str]]
     supports_multiturn: ClassVar[bool] = False
+    supports_fewshot: ClassVar[bool] = True
+    supports_base_generation: ClassVar[bool] = False
     scoring_version: ClassVar[str | None] = None
 
     def __init_subclass__(cls, **kwargs: object) -> None:

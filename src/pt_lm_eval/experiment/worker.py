@@ -1,5 +1,3 @@
-"""Entrada interna do subprocesso de uma GPU; nunca escreve o CSV compartilhado."""
-
 from __future__ import annotations
 
 import json

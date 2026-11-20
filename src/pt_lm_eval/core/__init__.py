@@ -1,6 +1,4 @@
-"""Tipos do domínio: itens, pedidos, respostas, pontuação e o registro por nome."""
-
-from .items import LETTERS, InstructionItem, Item, MCQItem
+from .items import LETTERS, CompletionItem, InstructionItem, Item, MCQItem
 from .registry import Registry
 from .requests import (
     GenerateRequest,
@@ -15,6 +13,7 @@ from .requests import (
 
 __all__ = [
     "LETTERS",
+    "CompletionItem",
     "GenerateRequest",
     "GenerateResponse",
     "InstructionItem",

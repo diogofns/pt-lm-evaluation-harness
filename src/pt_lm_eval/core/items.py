@@ -1,5 +1,3 @@
-"""Itens: o que um benchmark produz e uma avaliação consome."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,6 +20,9 @@ class MCQItem(Item):
     gold: int  # índice 0-based em `options`
     subject: str | None = None
     context: str | None = None  # texto de apoio mostrado antes da pergunta
+    protocol: str = "pt"  # protocolo de prompt específico do benchmark
+    prompt_description: str | None = None  # prefixo opcional do protocolo de avaliação
+    task_group: str | None = None  # subtarefa de avaliação; INCLUDE agrupa por domínio
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "options", tuple(self.options))
@@ -37,6 +38,17 @@ class MCQItem(Item):
     @property
     def letters(self) -> str:
         return LETTERS[: len(self.options)]
+
+
+@dataclass(frozen=True)
+class CompletionItem(Item):
+    """Prompt e resposta textual de referência (GSM8K, MMLU-Pro e MMLU-Redux)."""
+
+    prompt: str
+    target: str
+    protocol: str
+    subject: str | None = None
+    description: str = ""
 
 
 @dataclass(frozen=True)

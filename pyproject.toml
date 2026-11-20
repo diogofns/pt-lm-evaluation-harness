@@ -18,10 +18,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-lm-eval = ["lm-eval[api,ifeval]>=0.4.9"]
-ifeval = [  # verificadores do IFEval PT
+ifeval = [  # verificadores do IFEval original e PT
     "langdetect>=1.0.9",
     "nltk>=3.9",
+    "immutabledict>=4",
+    "packaging>=23",
     "spacy>=3.8,<3.9",
     "pt-core-news-sm @ https://github.com/explosion/spacy-models/releases/download/pt_core_news_sm-3.8.0/pt_core_news_sm-3.8.0-py3-none-any.whl",
 ]
@@ -42,11 +43,13 @@ testpaths = ["tests"]
 markers = [
     "gpu: precisa de GPU e vLLM (pytest -m gpu)",
     "network: baixa datasets do Hugging Face (pytest -m network)",
-    "parity: compara com o lm-eval (pytest -m parity)",
+    "parity: compara verificadores com vereditos publicados do IFEval PT",
 ]
 addopts = "-m 'not gpu and not network and not parity'"
 
 [tool.ruff]
+# Código de terceiros mantém sua formatação original e seus avisos de licença.
+extend-exclude = ["src/pt_lm_eval/evaluations/ifeval_en/vendor"]
 line-length = 110
 target-version = "py311"
 

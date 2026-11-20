@@ -1,5 +1,3 @@
-"""Casos reais de conversão que podem alterar o gabarito ou vazar respostas."""
-
 from pt_lm_eval import BENCHMARKS, EVALUATIONS
 from pt_lm_eval.core import LoglikelihoodResponse
 

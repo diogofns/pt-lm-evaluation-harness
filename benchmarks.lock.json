@@ -7,22 +7,6 @@
       "gen": "7c9c430d5fcc4403"
     }
   },
-  "enem@1.0": {
-    "source": "hf:maritaca-ai/enem/2022+2023+2024:train@b2a7257356b0f56b740d57f23f8a575542ff6c0c",
-    "prompts": {
-      "mcf": "8d695dbc5f2db417",
-      "cf": "0e5f7a0b8ed32b4e",
-      "gen": "dc29ee5601ac5e19"
-    }
-  },
-  "energy_regulacao@1.0": {
-    "source": "hf:cemig-ceia/energy-eval:train@cac76ae9456fc3c9354d761880bc3c3a5b54d1e1",
-    "prompts": {
-      "mcf": "e925643a7e2eac5e",
-      "cf": "6c4f652523b5b196",
-      "gen": "585a8b1ec8e2256a"
-    }
-  },
   "global_mmlu_pt@1.0": {
     "source": "hf:CohereLabs/Global-MMLU/pt:test@0e619dbeb34206cd48705a1a0ea7fb21cae09993",
     "prompts": {
@@ -31,18 +15,148 @@
       "gen": "0b156e0b4e918477"
     }
   },
-  "global_piqa_nonparallel_pt_br@1.0": {
+  "global_mmlu_pt@2.0": {
+    "source": "hf:CohereLabs/Global-MMLU/pt:test@0e619dbeb34206cd48705a1a0ea7fb21cae09993",
+    "prompts": {
+      "mcf": "c3742ee36b5c5559",
+      "cf": "eb8cc3f6884ce5f7",
+      "gen": "d274d4b0d3424e99"
+    }
+  },
+  "global_mmlu_pt@2.1": {
+    "source": "hf:CohereLabs/Global-MMLU/pt:test@0e619dbeb34206cd48705a1a0ea7fb21cae09993",
+    "prompts": {
+      "mcf": "c3742ee36b5c5559"
+    }
+  },
+  "global_mmlu_pt@2.2": {
+    "source": "hf:CohereLabs/Global-MMLU/pt:test@0e619dbeb34206cd48705a1a0ea7fb21cae09993",
+    "prompts": {
+      "mcf": "0697e55b87b36a8f"
+    }
+  },
+  "global_mmlu_pt@2.3": {
+    "source": "hf:CohereLabs/Global-MMLU/pt:test@0e619dbeb34206cd48705a1a0ea7fb21cae09993",
+    "prompts": {
+      "mcf": "0697e55b87b36a8f",
+      "gen": "dbb3527d1b183700"
+    }
+  },
+  "global_piqa_nonparallel_pt_br@1.1": {
     "source": "hf:mrlbenchmarks/global-piqa-nonparallel/por_latn_braz:test@6777742fa3634c0583cda3b7f8a482ea7b1b0937",
     "prompts": {
-      "mcf": "3974d6946c976d02",
-      "cf": "2f06b19e711e8cc9",
-      "gen": "daa4a8bf9b1c182e"
+      "mcf": "4ac5333be7ba026a",
+      "cf": "7ae11790b922da20",
+      "gen": "b234154f5d97e5ea"
+    }
+  },
+  "global_piqa_nonparallel_pt_br@2.0": {
+    "source": "hf:mrlbenchmarks/global-piqa-nonparallel/por_latn_braz:test@6777742fa3634c0583cda3b7f8a482ea7b1b0937",
+    "prompts": {
+      "cf": "7ae11790b922da20",
+      "gen": "283679c5db4b2109"
+    }
+  },
+  "global_piqa_nonparallel_pt_br@2.1": {
+    "source": "hf:mrlbenchmarks/global-piqa-nonparallel/por_latn_braz:test@6777742fa3634c0583cda3b7f8a482ea7b1b0937",
+    "prompts": {
+      "cf": "7ae11790b922da20",
+      "gen": "86a605cb806e9181"
+    }
+  },
+  "gpqa_diamond_zeroshot@1.0": {
+    "source": "hf:Idavidrein/gpqa/gpqa_diamond:train@83022cefff930aea54f654c0b282e74b9eeda5c6",
+    "prompts": {
+      "gpqa_mcf": "005a255cdc90a0d3"
+    }
+  },
+  "gpqa_extended_zeroshot@1.0": {
+    "source": "hf:Idavidrein/gpqa/gpqa_extended:train@83022cefff930aea54f654c0b282e74b9eeda5c6",
+    "prompts": {
+      "gpqa_mcf": "7c19a88ec3ccca06"
+    }
+  },
+  "gpqa_main_zeroshot@1.0": {
+    "source": "hf:Idavidrein/gpqa/gpqa_main:train@83022cefff930aea54f654c0b282e74b9eeda5c6",
+    "prompts": {
+      "gpqa_mcf": "7c19a88ec3ccca06"
+    }
+  },
+  "gsm8k@1.0": {
+    "source": "hf:openai/gsm8k/main:test@740312add88f781978c0658806c59bc2815b9866",
+    "prompts": {
+      "exact_match": "ebb534293c1ca5f9"
+    }
+  },
+  "ifeval@1.0": {
+    "source": "hf:google/IFEval:train@966cd89545d6b6acfd7638bc708b98261ca58e84",
+    "prompts": {
+      "ifeval_en": "365a78e8e059df44"
     }
   },
   "ifeval_pt@1.0": {
     "source": "hf:gap-ufg/Portuguese-IFEval:test@0ff3fe8d82a5cdb43153f86b301b2c9d5c6ea098",
     "prompts": {
       "ifeval": "69f48cc40f35101e"
+    }
+  },
+  "include_pt@1.0": {
+    "source": "hf:CohereLabs/include-base-44/Portuguese:test@d2e1f6015f67a43c02a9a68db98e2298e2d6a660",
+    "prompts": {
+      "mcf": "509c570ba14afb26",
+      "cf": "7c50e3df043e31be",
+      "gen": "78019301ea6ccb73"
+    }
+  },
+  "include_pt@2.0": {
+    "source": "hf:CohereLabs/include-base-44/Portuguese:test@d2e1f6015f67a43c02a9a68db98e2298e2d6a660",
+    "prompts": {
+      "mcf": "2f9155b0a2021844",
+      "gen": "5822f6aa523b17d9"
+    }
+  },
+  "include_pt@2.1": {
+    "source": "hf:CohereLabs/include-base-44/Portuguese:test@d2e1f6015f67a43c02a9a68db98e2298e2d6a660",
+    "prompts": {
+      "mcf": "2f9155b0a2021844"
+    }
+  },
+  "include_pt@2.2": {
+    "source": "hf:CohereLabs/include-base-44/Portuguese:test@d2e1f6015f67a43c02a9a68db98e2298e2d6a660",
+    "prompts": {
+      "mcf": "c04c29f75af00669"
+    }
+  },
+  "include_pt@2.3": {
+    "source": "hf:CohereLabs/include-base-44/Portuguese:test@d2e1f6015f67a43c02a9a68db98e2298e2d6a660",
+    "prompts": {
+      "mcf": "c04c29f75af00669",
+      "gen": "a0280eb243c2d17b"
+    }
+  },
+  "math_pt_br@1.0": {
+    "source": "hf:tiagoteixeira03/MATH-PT/ptbr_multiple_choice:test@11c44f85c32d5d6b3dce76d163201ae4c6abd4b2",
+    "prompts": {
+      "mcf": "6e8cf11aeed71cd4"
+    }
+  },
+  "math_pt_br@1.1": {
+    "source": "hf:tiagoteixeira03/MATH-PT/ptbr_multiple_choice:test@11c44f85c32d5d6b3dce76d163201ae4c6abd4b2",
+    "prompts": {
+      "mcf": "30f0e0ac2f4cb585"
+    }
+  },
+  "math_pt_br@1.2": {
+    "source": "hf:tiagoteixeira03/MATH-PT/ptbr_multiple_choice:test@11c44f85c32d5d6b3dce76d163201ae4c6abd4b2",
+    "prompts": {
+      "mcf": "30f0e0ac2f4cb585",
+      "gen": "9362e8e31ea42361"
+    }
+  },
+  "mmlu_pro@1.0": {
+    "source": "hf:TIGER-Lab/MMLU-Pro:test@b189ec765aa7ed75c8acfea42df31fdae71f97be",
+    "prompts": {
+      "exact_match": "156d963049b9fc9d"
     }
   },
   "mmlu_prox_pt@1.0": {
@@ -61,6 +175,37 @@
       "gen": "1d66261d9ea97e91"
     }
   },
+  "mmlu_pt_high_school@1.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-full:*@b29d6ca3887d250114b543974fa8845a3143e229",
+    "prompts": {
+      "mcf": "f53537270927fe2b"
+    }
+  },
+  "mmlu_pt_high_school@2.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-full:*@b29d6ca3887d250114b543974fa8845a3143e229",
+    "prompts": {
+      "mcf": "a4148d996a2299fe"
+    }
+  },
+  "mmlu_pt_high_school@2.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-full:*@b29d6ca3887d250114b543974fa8845a3143e229",
+    "prompts": {
+      "mcf": "a4148d996a2299fe"
+    }
+  },
+  "mmlu_pt_high_school@2.2": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-full:*@b29d6ca3887d250114b543974fa8845a3143e229",
+    "prompts": {
+      "mcf": "c43a2b6b91dcd341"
+    }
+  },
+  "mmlu_pt_high_school@2.3": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-full:*@b29d6ca3887d250114b543974fa8845a3143e229",
+    "prompts": {
+      "mcf": "c43a2b6b91dcd341",
+      "gen": "0c34a54c73adb736"
+    }
+  },
   "mmlu_pt_high_school_hard@1.0": {
     "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
     "prompts": {
@@ -69,12 +214,35 @@
       "gen": "4475e119fe9cc21f"
     }
   },
-  "mmlu_pt_sintetico@1.1": {
-    "source": "hf:cemig-ceia/benchmark_Qwen3-235B-A22B_MMLU_v2:train@831ba6bbae5b6057fbc3cae40e13eae7b55ebb26",
+  "mmlu_pt_high_school_hard@1.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
     "prompts": {
-      "mcf": "76618da3573f6228",
-      "cf": "9e9dd41cf624939a",
-      "gen": "1c86170a8c5e0d23"
+      "mcf": "43589e88ccedce9d"
+    }
+  },
+  "mmlu_pt_high_school_hard@2.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
+    "prompts": {
+      "mcf": "bf96f5f001522e7e"
+    }
+  },
+  "mmlu_pt_high_school_hard@2.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
+    "prompts": {
+      "mcf": "bf96f5f001522e7e"
+    }
+  },
+  "mmlu_pt_high_school_hard@2.2": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
+    "prompts": {
+      "mcf": "2558d2c9eb777bbe"
+    }
+  },
+  "mmlu_pt_high_school_hard@2.3": {
+    "source": "hf:mmlu-pt/mmlu-pt-high-school-hard:*@c40e827798003b02a7b563f2afa4f8413fa6c9f6",
+    "prompts": {
+      "mcf": "2558d2c9eb777bbe",
+      "gen": "02b2f985f12c64f9"
     }
   },
   "mmlu_pt_undergraduate@1.0": {
@@ -85,6 +253,37 @@
       "gen": "39009f48bdf63b93"
     }
   },
+  "mmlu_pt_undergraduate@1.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-full:*@98cc293cd60c3779c2b1da1dd5abb3b47d9dee42",
+    "prompts": {
+      "mcf": "3096b91250f8b8c4"
+    }
+  },
+  "mmlu_pt_undergraduate@2.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-full:*@98cc293cd60c3779c2b1da1dd5abb3b47d9dee42",
+    "prompts": {
+      "mcf": "94617ca43d7c2062"
+    }
+  },
+  "mmlu_pt_undergraduate@2.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-full:*@98cc293cd60c3779c2b1da1dd5abb3b47d9dee42",
+    "prompts": {
+      "mcf": "94617ca43d7c2062"
+    }
+  },
+  "mmlu_pt_undergraduate@2.2": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-full:*@98cc293cd60c3779c2b1da1dd5abb3b47d9dee42",
+    "prompts": {
+      "mcf": "dcb1a13a21aa2652"
+    }
+  },
+  "mmlu_pt_undergraduate@2.3": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-full:*@98cc293cd60c3779c2b1da1dd5abb3b47d9dee42",
+    "prompts": {
+      "mcf": "dcb1a13a21aa2652",
+      "gen": "3d0a5bf89bd3a8d6"
+    }
+  },
   "mmlu_pt_undergraduate_hard@1.0": {
     "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
     "prompts": {
@@ -93,20 +292,75 @@
       "gen": "8e9e326b18df8ec3"
     }
   },
-  "mmmlu_pt_br@1.1": {
-    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+  "mmlu_pt_undergraduate_hard@1.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
     "prompts": {
-      "mcf": "ee738cad64632e3f",
-      "cf": "d72773df35c7ccd3",
-      "gen": "53ca5083b52ebc50"
+      "mcf": "f1090b1d7a1606d9"
     }
   },
-  "oab_exams@1.0": {
-    "source": "hf:eduagarcia/oab_exams:train@fe810531d30e7799dd83c2e5be302ca2f2bdf930",
+  "mmlu_pt_undergraduate_hard@2.0": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
     "prompts": {
-      "mcf": "f3692acae6bc920c",
-      "cf": "de64ac58b5889c39",
-      "gen": "efadc820fd9d28dd"
+      "mcf": "5cecc7032c853c6c"
+    }
+  },
+  "mmlu_pt_undergraduate_hard@2.1": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
+    "prompts": {
+      "mcf": "5cecc7032c853c6c"
+    }
+  },
+  "mmlu_pt_undergraduate_hard@2.2": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
+    "prompts": {
+      "mcf": "ef0df9b1a4729740"
+    }
+  },
+  "mmlu_pt_undergraduate_hard@2.3": {
+    "source": "hf:mmlu-pt/mmlu-pt-undergraduate-hard:*@7346b172a05c0286b57282fdf541ccdeba28df6a",
+    "prompts": {
+      "mcf": "ef0df9b1a4729740",
+      "gen": "7bbe90add862eda2"
+    }
+  },
+  "mmlu_redux_generative@1.0": {
+    "source": "hf:fxmarty/mmlu-redux-2.0-ok/abstract_algebra+anatomy+astronomy+business_ethics+clinical_knowledge+college_biology+college_chemistry+college_computer_science+college_mathematics+college_medicine+college_physics+computer_security+conceptual_physics+econometrics+electrical_engineering+elementary_mathematics+formal_logic+global_facts+high_school_biology+high_school_chemistry+high_school_computer_science+high_school_european_history+high_school_geography+high_school_government_and_politics+high_school_macroeconomics+high_school_mathematics+high_school_microeconomics+high_school_physics+high_school_psychology+high_school_statistics+high_school_us_history+high_school_world_history+human_aging+human_sexuality+international_law+jurisprudence+logical_fallacies+machine_learning+management+marketing+medical_genetics+miscellaneous+moral_disputes+moral_scenarios+nutrition+philosophy+prehistory+professional_accounting+professional_law+professional_medicine+professional_psychology+public_relations+security_studies+sociology+us_foreign_policy+virology+world_religions:test@8dd06e599d20d57e83b590d497c95869a2d18781",
+    "prompts": {
+      "exact_match": "e710b3f5bec71f02"
+    }
+  },
+  "mmmlu_pt_br@1.2": {
+    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+    "prompts": {
+      "mcf": "97ea52b0c7b91a88",
+      "cf": "95f80c228d7d9a89",
+      "gen": "d192800bcf2918d3"
+    }
+  },
+  "mmmlu_pt_br@2.0": {
+    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+    "prompts": {
+      "mcf": "97ea52b0c7b91a88",
+      "gen": "d192800bcf2918d3"
+    }
+  },
+  "mmmlu_pt_br@2.1": {
+    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+    "prompts": {
+      "mcf": "97ea52b0c7b91a88"
+    }
+  },
+  "mmmlu_pt_br@2.2": {
+    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+    "prompts": {
+      "mcf": "6d8af9da7fa1ada0"
+    }
+  },
+  "mmmlu_pt_br@2.3": {
+    "source": "hf:openai/MMMLU/PT_BR:test@325a01dc3e173cac1578df94120499aaca2e2504",
+    "prompts": {
+      "mcf": "6d8af9da7fa1ada0",
+      "gen": "f24ecebb1a0dda4d"
     }
   }
 }

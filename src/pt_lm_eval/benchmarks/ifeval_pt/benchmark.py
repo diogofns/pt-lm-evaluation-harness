@@ -10,6 +10,7 @@ class IFEvalPt(Benchmark):
         "gap-ufg/Portuguese-IFEval", split="test", revision="0ff3fe8d82a5cdb43153f86b301b2c9d5c6ea098"
     )
     evaluations = ("ifeval",)
+    fixed_num_fewshot = 0
 
     def to_item(self, row: dict) -> InstructionItem:
         return InstructionItem(

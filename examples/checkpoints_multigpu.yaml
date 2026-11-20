@@ -1,0 +1,39 @@
+# Point to exported Hugging Face checkpoints with tokenizer files.
+# Use GPU indices from the host.
+experiment: checkpoints_multigpu
+output_dir: output
+seed: 1234
+num_fewshot: 0
+concurrency: 128          # Concurrent requests per active model
+gpus: [0, 1]             # Also accepts GPU UUIDs
+
+server:
+  mode: local
+  executable: /usr/local/bin/vllm
+  port: 8000              # GPU 0 uses 8000 and GPU 1 uses 8001
+  args:
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 32768
+    max_num_seqs: 128
+    max_num_batched_tokens: 16384
+    gpu_memory_utilization: 0.80
+    generation_config: vllm
+    seed: 1234
+
+# Use type: instruct for checkpoints with a chat template.
+# Keep checkpoint weights fixed when resuming a run.
+models:
+  - name: /path/to/checkpoint-1000
+    type: base
+    label: step-1000
+  - name: /path/to/checkpoint-2000
+    type: base
+    label: step-2000
+  - name: /path/to/checkpoint-3000
+    type: base
+    label: step-3000
+
+benchmarks:
+  - mmlu_pt_high_school
+  - mmlu_pt_undergraduate

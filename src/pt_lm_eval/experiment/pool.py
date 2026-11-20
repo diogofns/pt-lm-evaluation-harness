@@ -1,5 +1,3 @@
-"""Fila FIFO de modelos: cada subprocesso possui uma GPU e uma porta exclusivas."""
-
 from __future__ import annotations
 
 import json
@@ -19,7 +17,7 @@ from .config import ExperimentConfig, ModelConfig
 log = logging.getLogger("pt_lm_eval")
 
 
-def interrupt(signum: int, frame: object) -> None:
+def interrupt(_signum: int, _frame: object) -> None:
     # Um segundo sinal não deve interromper a liberação dos servidores.
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -38,11 +36,6 @@ class GPUPool:
         assert cfg.gpus is not None
         self.cfg = cfg
         self.slots = [(gpu, cfg.server.port + i) for i, gpu in enumerate(cfg.gpus)]
-        names = [slug(model.display_name) for model in cfg.models]
-        if len(names) != len(set(names)):
-            raise ValueError("modelos compartilham o diretório de saída; defina labels únicos")
-        if any(name in {"", ".", "..", "logs"} for name in names):
-            raise ValueError("nome de saída reservado; defina um label para o modelo")
         visible = os.environ.get("CUDA_VISIBLE_DEVICES")
         if visible is not None:
             allowed = {value.strip() for value in visible.split(",")}

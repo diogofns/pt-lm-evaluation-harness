@@ -1,5 +1,3 @@
-"""As alternativas do MMLU-PT vêm como texto de um dict Python, com LaTeX e quebras de linha."""
-
 from __future__ import annotations
 
 import ast

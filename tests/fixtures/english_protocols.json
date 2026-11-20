@@ -1,0 +1,187 @@
+{
+  "mmlu_pro": {
+    "row": {
+      "question": "A question?",
+      "options": [
+        " one ",
+        "two",
+        "three"
+      ],
+      "category": "biology",
+      "answer": "B",
+      "cot_content": "A: Let's think step by step. Explain. The answer is (B).",
+      "_split": "validation",
+      "_index": 0
+    },
+    "example_prompt": "Question:\nA question?\nOptions:\nA. one\nB. two\nC. three\nAnswer: Let's think step by step.",
+    "example_target": "Explain. The answer is (B).",
+    "query_prompt": "Question:\nA question?\nOptions:\nA. one\nB. two\nC. three\nAnswer: Let's think step by step.",
+    "description": "The following are multiple choice questions (with answers) about biology. Think step by step and then finish your answer with \"the answer is (X)\" where X is the correct letter choice.\n"
+  },
+  "gpqa": {
+    "rows": [
+      {
+        "Question": "Question 0?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 0
+      },
+      {
+        "Question": "Question 1?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 1
+      },
+      {
+        "Question": "Question 2?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 2
+      },
+      {
+        "Question": "Question 3?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 3
+      },
+      {
+        "Question": "Question 4?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 4
+      },
+      {
+        "Question": "Question 5?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 5
+      },
+      {
+        "Question": "Question 6?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 6
+      },
+      {
+        "Question": "Question 7?",
+        "Incorrect Answer 1": " one  bad ",
+        "Incorrect Answer 2": "two [title] bad",
+        "Incorrect Answer 3": "three[c] bad",
+        "Correct Answer": "yes",
+        "_subset": "gpqa_diamond",
+        "_split": "train",
+        "_index": 7
+      }
+    ],
+    "expected": [
+      {
+        "question": "Question 0?",
+        "choices": [
+          "three[c] bad",
+          "one bad",
+          "two. bad",
+          "yes"
+        ],
+        "answer": "(D)"
+      },
+      {
+        "question": "Question 1?",
+        "choices": [
+          "one bad",
+          "two. bad",
+          "yes",
+          "three[c] bad"
+        ],
+        "answer": "(C)"
+      },
+      {
+        "question": "Question 2?",
+        "choices": [
+          "one bad",
+          "three[c] bad",
+          "two. bad",
+          "yes"
+        ],
+        "answer": "(D)"
+      },
+      {
+        "question": "Question 3?",
+        "choices": [
+          "two. bad",
+          "one bad",
+          "yes",
+          "three[c] bad"
+        ],
+        "answer": "(C)"
+      },
+      {
+        "question": "Question 4?",
+        "choices": [
+          "three[c] bad",
+          "one bad",
+          "yes",
+          "two. bad"
+        ],
+        "answer": "(C)"
+      },
+      {
+        "question": "Question 5?",
+        "choices": [
+          "yes",
+          "two. bad",
+          "three[c] bad",
+          "one bad"
+        ],
+        "answer": "(A)"
+      },
+      {
+        "question": "Question 6?",
+        "choices": [
+          "three[c] bad",
+          "one bad",
+          "yes",
+          "two. bad"
+        ],
+        "answer": "(C)"
+      },
+      {
+        "question": "Question 7?",
+        "choices": [
+          "yes",
+          "two. bad",
+          "three[c] bad",
+          "one bad"
+        ],
+        "answer": "(A)"
+      }
+    ]
+  }
+}

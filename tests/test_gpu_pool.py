@@ -1,5 +1,3 @@
-"""Fila multi-GPU sem GPU: subprocessos reais verificam isolamento e ordem dinâmica."""
-
 import json
 import os
 import signal
@@ -29,7 +27,7 @@ def config(tmp_path, **kwargs):
         experiment="queue",
         output_dir=str(tmp_path),
         models=tuple(ModelConfig(name, "base") for name in ("a", "b", "c")),
-        benchmarks=(BenchmarkRun("enem"),),
+        benchmarks=(BenchmarkRun("belebele_pt"),),
         gpus=("0", "1"),
         **kwargs,
     )
@@ -114,9 +112,9 @@ while wait_for and not (root / (wait_for + ".started")).exists():
     time.sleep(.01)
 if name == "b" and os.environ["FAIL_B"] == "1":
     sys.exit(1)
-result = Path(cfg["output_dir"]) / cfg["experiment"] / name / "enem.mcf.results.json"
+result = Path(cfg["output_dir"]) / cfg["experiment"] / name / "belebele_pt.mcf.results.json"
 result.parent.mkdir(parents=True, exist_ok=True)
-result.write_text(json.dumps({"model": {"name": name}, "benchmark": {"name": "enem", "version": "1"},
+result.write_text(json.dumps({"model": {"name": name}, "benchmark": {"name": "belebele_pt", "version": "1"},
     "evaluation": {"name": "mcf"}, "metrics": {"acc": .5}}))
 """
 
@@ -208,7 +206,7 @@ def test_worker_sigterm_closes_endpoint_and_skips_inapplicable_steps(tmp_path, m
         config(tmp_path),
         gpus=None,
         models=(ModelConfig("a", "base"),),
-        benchmarks=(BenchmarkRun("enem"), BenchmarkRun("ifeval_pt")),
+        benchmarks=(BenchmarkRun("belebele_pt"), BenchmarkRun("ifeval_pt")),
     )
     path = tmp_path / "worker.json"
     path.write_text(json.dumps({"gpu": "3", "config": asdict(cfg)}))

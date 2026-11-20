@@ -1,10 +1,3 @@
-"""F0: o log-likelihood vindo do servidor vLLM bate com um forward do transformers.
-
-Precisa de um servidor vLLM no ar e de torch:
-
-    PT_LM_EVAL_URL=http://127.0.0.1:8000/v1 PT_LM_EVAL_MODEL=Qwen/Qwen2.5-0.5B pytest -m gpu
-"""
-
 from __future__ import annotations
 
 import asyncio

@@ -1,11 +1,3 @@
-"""Cliente de servidores OpenAI-compatíveis (vLLM, endpoints externos, APIs).
-
-- loglikelihood: POST /completions com o prompt em token IDs e `prompt_logprobs`; o vLLM
-  devolve o logprob de cada token do prompt e somamos os da continuação. Exige
-  tokenizer local, então não existe para `type: api`.
-- generate: POST /chat/completions (com chat template) ou /completions (sem).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -13,16 +5,17 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 import httpx
 from tqdm.asyncio import tqdm_asyncio
 
 from ..core import GenerateRequest, GenerateResponse, LoglikelihoodRequest, LoglikelihoodResponse
+from .generation import chat_messages, generation_params, token_budget
 
 if TYPE_CHECKING:
     from ..experiment.config import ModelConfig
 
-DEFAULT_MAX_TOKENS = 1024
 LOGLIKELIHOOD_BATCH = 16  # prompts por requisição de log-likelihood
 
 
@@ -41,7 +34,10 @@ class Client:
     retry_client_errors: bool = True  # False para APIs pagas: 4xx (exceto 429) não se repete
     max_tokens_field: str = "max_tokens"
     generate_params: dict[str, Any] = field(default_factory=dict)
+    override_task_sampling: bool = False
+    override_task_max_tokens: bool = False
     system_prompt: str | None = None
+    reasoning_enabled: bool = False
 
     def __post_init__(self) -> None:
         self._pairs: PairTokenizer | None = None
@@ -49,20 +45,19 @@ class Client:
         self._semaphore = asyncio.Semaphore(self.concurrency)
 
     @classmethod
-    def for_model(cls, model: ModelConfig, base_url: str, max_length: int | None) -> Client:
+    def for_model(
+        cls, model: ModelConfig, base_url: str, max_length: int | None, *, reasoning_parser: Any = None
+    ) -> Client:
         is_api = model.type == "api"
-        params = dict(model.generate)
-        if model.thinking is not None:
-            # Convenção dos chat templates do Qwen3 e afins; templates sem a variável a ignoram.
-            params["chat_template_kwargs"] = {
-                **params.get("chat_template_kwargs", {}),
-                "enable_thinking": model.thinking,
-            }
+        key_env = model.api_key_env
+        endpoint = urlsplit(base_url)
+        if key_env is None and endpoint.scheme == "https" and endpoint.hostname == "api.openai.com":
+            key_env = "OPENAI_API_KEY"
         return cls(
             model=model.name,
             base_url=base_url,
             chat=model.uses_chat,
-            api_key=os.environ.get(model.api_key_env or "OPENAI_API_KEY"),
+            api_key=os.environ.get(key_env) if key_env else None,
             tokenizer=None if is_api else (model.tokenizer or model.name),
             add_bos=model.add_bos,
             max_length=max_length,
@@ -71,13 +66,25 @@ class Client:
             max_retries=model.max_retries,
             retry_client_errors=not is_api,
             max_tokens_field="max_completion_tokens" if is_api else "max_tokens",
-            generate_params=params,
+            generate_params=generation_params(model),
+            override_task_sampling=model.override_task_sampling,
+            override_task_max_tokens=model.override_task_max_tokens,
             system_prompt=model.system_prompt,
+            reasoning_enabled=(
+                model.thinking is True
+                or (
+                    model.thinking is None
+                    and bool(reasoning_parser or model.server_args.get("reasoning_parser"))
+                    and "/no_think" not in (model.system_prompt or "")
+                )
+            ),
         )
 
     # --- log-likelihood -------------------------------------------------------------
 
     async def loglikelihood(self, requests: Sequence[LoglikelihoodRequest]) -> list[LoglikelihoodResponse]:
+        if not requests:
+            return []
         pairs = self.pair_tokenizer()
         encoded = [
             truncate_left(*pairs.encode_pair(r.context, r.continuation), self.max_length) for r in requests
@@ -115,27 +122,38 @@ class Client:
     # --- geração --------------------------------------------------------------------
 
     async def generate(self, requests: Sequence[GenerateRequest]) -> list[GenerateResponse]:
+        if not requests:
+            return []
         return await tqdm_asyncio.gather(*map(self._generate_one, requests), desc="generate", leave=False)
 
     async def _generate_one(self, request: GenerateRequest) -> GenerateResponse:
         params = {"temperature": 0, **self.generate_params}
-        # Vale o maior entre o da tarefa e o do modelo: modelos de raciocínio configurados
-        # com mais tokens não são cortados pelo limite de uma tarefa.
-        limits = [n for n in (request.max_tokens, params.pop("max_tokens", None)) if n]
         payload: dict[str, Any] = {
             "model": self.model,
-            self.max_tokens_field: max(limits, default=DEFAULT_MAX_TOKENS),
+            self.max_tokens_field: token_budget(
+                request, params, override_task_max_tokens=self.override_task_max_tokens
+            ),
         }
+        params.pop("max_tokens", None)
         # Stops só em completions (o modelo base não emenda a próxima questão); em chat, o
         # vLLM os aplica também ao raciocínio e corta o <think> quando o modelo cita o enunciado.
-        if request.stop and not self.chat:
+        defer_stops = request.enforce_generation_config and self.reasoning_enabled
+        if request.stop and (not self.chat or request.enforce_generation_config) and not defer_stops:
             payload["stop"] = list(request.stop)
         payload.update({k: v for k, v in params.items() if v is not None})
+        payload.update({k: v for k, v in request.params.items() if v is not None})
+        if self.override_task_sampling:
+            # Varreduras explícitas alteram só os parâmetros declarados, mantendo os limites da tarefa.
+            payload.update(
+                {
+                    k: self.generate_params[k]
+                    for k in ("temperature", "top_p")
+                    if self.generate_params.get(k) is not None
+                }
+            )
         try:
             if self.chat:
-                messages = list(request.messages or [{"role": "user", "content": request.prompt}])
-                if self.system_prompt and messages[0]["role"] != "system":
-                    messages.insert(0, {"role": "system", "content": self.system_prompt})
+                messages = chat_messages(request, self.system_prompt)
                 choice = (await self._post("/chat/completions", {**payload, "messages": messages}))[
                     "choices"
                 ][0]
@@ -151,8 +169,17 @@ class Client:
             return GenerateResponse(text="", error=f"{type(exc).__name__}: {exc}")
         if reasoning is None:
             text, reasoning = split_reasoning(text)
+        if request.enforce_generation_config:
+            # Apply response filters after separating reasoning from the final answer.
+            if self.reasoning_enabled:
+                text = text.lstrip()
+            for term in request.stop:
+                if term:
+                    text = text.split(term)[0]
         return GenerateResponse(
-            text=text.strip(), reasoning=reasoning, finish_reason=choice.get("finish_reason")
+            text=text if request.enforce_generation_config else text.strip(),
+            reasoning=reasoning,
+            finish_reason=choice.get("finish_reason"),
         )
 
     # --- HTTP -----------------------------------------------------------------------
@@ -183,7 +210,8 @@ class Client:
                     break
             except httpx.TransportError as exc:
                 last = exc
-            await asyncio.sleep(min(30.0, 2.0**attempt))
+            if attempt + 1 < self.max_retries:
+                await asyncio.sleep(min(30.0, 2.0**attempt))
         raise last or RuntimeError("falha na requisição")
 
     async def aclose(self) -> None:
@@ -195,7 +223,7 @@ class Client:
 def continuation_logprob(prompt_logprobs: list[Any], ids: list[int], start: int) -> LoglikelihoodResponse:
     """Soma os logprobs dos tokens a partir de `start`, conferindo que são os tokens enviados.
 
-    `is_greedy` compara valores, como o lm-eval: um token empatado com o mais provável conta
+    `is_greedy` compara valores: um token empatado com o mais provável conta
     como guloso (empates exatos são comuns em bf16; o `rank` do vLLM desempata).
     """
     if start < 1:
@@ -220,9 +248,8 @@ def split_reasoning(text: str) -> tuple[str, str | None]:
 class PairTokenizer:
     """Tokenização de pares (contexto, continuação) para log-likelihood.
 
-    `encode_pair` é portado do lm-evaluation-harness (lm_eval/api/model.py, _encode_pair e
-    loglikelihood), Copyright (c) 2020 EleutherAI, licença MIT. Diferença: aqui o BOS é
-    adicionado quando o tokenizer o usa por padrão (Llama, Gemma), em vez de nunca.
+    Inclui código Copyright (c) 2020 EleutherAI, licença MIT (veja NOTICE).
+    O BOS é adicionado quando o tokenizer o usa por padrão (Llama, Gemma).
     """
 
     def __init__(self, tokenizer: Any, add_bos: bool | None = None) -> None:
@@ -232,7 +259,7 @@ class PairTokenizer:
             default = tokenizer("a", add_special_tokens=True).input_ids
             add_bos = bos is not None and len(default) > 0 and default[0] == bos
         self.bos = [bos] if add_bos else []
-        # Contexto vazio: condiciona no BOS, ou no EOS se não houver BOS (como o lm-eval).
+        # Contexto vazio: condiciona no BOS, ou no EOS se não houver BOS (token inicial de contexto).
         self.prefix_token_id = bos if bos is not None else tokenizer.eos_token_id
 
     def encode(self, text: str) -> list[int]:

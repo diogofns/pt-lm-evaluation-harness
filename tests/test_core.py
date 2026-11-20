@@ -1,5 +1,3 @@
-"""Testes do núcleo que não precisam de rede nem GPU."""
-
 from __future__ import annotations
 
 import math
@@ -8,12 +6,13 @@ import pytest
 
 from pt_lm_eval import BENCHMARKS, EVALUATIONS, Benchmark, ColumnBenchmark, Columns, MCQItem
 from pt_lm_eval.benchmarks.base import Loaded, answer_index, letter_index
+from pt_lm_eval.cli import main
 from pt_lm_eval.core import GenerateRequest, GenerateResponse, LoglikelihoodResponse, Registry, non_default
 from pt_lm_eval.evaluations.multiple_choice import argmax
 from pt_lm_eval.experiment import lengths, runner
 from pt_lm_eval.experiment.config import parse_config
 from pt_lm_eval.experiment.report import Results, aggregate, macro_mean_stderr, mean_stderr
-from pt_lm_eval.experiment.runner import Experiment, SmokeTestError, smoke_test
+from pt_lm_eval.experiment.runner import Experiment, GenerationError, SmokeTestError, smoke_test
 from pt_lm_eval.inference.client import Client, continuation_logprob, truncate_left
 from pt_lm_eval.inference.server import LocalVLLM, ServerError
 
@@ -44,8 +43,8 @@ def test_registry_rejects_duplicates_and_suggests_names():
 
 
 def test_builtin_evaluations_and_benchmarks_are_registered():
-    assert set(EVALUATIONS.names()) == {"mcf", "cf", "gen", "ifeval"}
-    assert "energy_regulacao" in BENCHMARKS.names()
+    assert set(EVALUATIONS.names()) == {"mcf", "cf", "gen", "ifeval", "exact_match", "gpqa_mcf", "ifeval_en"}
+    assert "belebele_pt" in BENCHMARKS.names()
 
 
 # --- dados ----------------------------------------------------------------------
@@ -126,12 +125,17 @@ def test_mean_stderr_matches_formula():
     assert mean == 0.75 and se == pytest.approx(math.sqrt((1 / 3) * (1 / 2 + 1)) / 2)
 
 
-def test_aggregate_headline_is_the_item_average_like_lm_eval():
+def test_aggregate_headline_is_the_item_average():
     records = [{"subject": "a", "metrics": {"acc": 1.0}}] * 3 + [{"subject": "b", "metrics": {"acc": 0.0}}]
     agg = aggregate(records)
-    assert agg["metrics"]["acc"] == 0.75  # média dos itens (weight_by_size do lm-eval)
+    assert agg["metrics"]["acc"] == 0.75  # média ponderada pelo número de itens
     assert agg["metrics_macro"]["acc"] == 0.5  # média das matérias
     assert agg["by_subject"]["a"]["n"] == 3
+
+
+def test_grouped_stderr_uses_variance_from_groups_with_two_or_more_items():
+    records = [{"subject": s, "metrics": {"acc": x}} for s, x in [("a", 0.0), ("a", 1.0), ("b", 1.0)]]
+    assert aggregate(records, group_by_task=True)["metrics"]["acc_stderr"] == pytest.approx(math.sqrt(1 / 6))
 
 
 def test_acc_norm_follows_the_benchmark_normalization_for_every_model():
@@ -160,8 +164,8 @@ def test_benchmark_rejects_unknown_cf_normalization():
 
 
 def test_config_rejects_unknown_keys():
-    base = {"experiment": "x", "models": [{"name": "m", "type": "base"}], "benchmarks": ["energy_regulacao"]}
-    assert parse_config(base).benchmarks[0].name == "energy_regulacao"
+    base = {"experiment": "x", "models": [{"name": "m", "type": "base"}], "benchmarks": ["belebele_pt"]}
+    assert parse_config(base).benchmarks[0].name == "belebele_pt"
     with pytest.raises(ValueError, match="chaves desconhecidas"):
         parse_config({**base, "modles": []})
     with pytest.raises(ValueError, match="type deve ser"):
@@ -183,7 +187,7 @@ def test_concurrency_reaches_client_with_model_override(
             "models": [
                 {"name": "m", "type": model_type, "base_url": "http://x/v1", "concurrency": model_value}
             ],
-            "benchmarks": ["energy_regulacao"],
+            "benchmarks": ["belebele_pt"],
         }
     )
     step = cfg.plan()[0]
@@ -198,7 +202,7 @@ def test_concurrency_rejects_invalid_limits(value, scope):
     data = {
         "experiment": "x",
         "models": [{"name": "m", "type": "base"}],
-        "benchmarks": ["energy_regulacao"],
+        "benchmarks": ["belebele_pt"],
     }
     target = data if scope == "global" else data["models"][0]
     target["concurrency"] = value
@@ -210,7 +214,7 @@ def test_moving_concurrency_to_global_preserves_resume_fingerprint():
     data = {
         "experiment": "x",
         "models": [{"name": "m", "type": "base", "concurrency": 8}],
-        "benchmarks": ["energy_regulacao"],
+        "benchmarks": ["belebele_pt"],
     }
     old = Experiment(parse_config(data))
     inherited = {**data, "concurrency": 8, "models": [{"name": "m", "type": "base"}]}
@@ -224,6 +228,34 @@ def test_moving_concurrency_to_global_preserves_resume_fingerprint():
     assert non_default(old.steps[0].model) == non_default(new.steps[0].model)
     assert fingerprint(old) == fingerprint(new)
     assert fingerprint(old) != fingerprint(changed)
+    moved = Experiment(parse_config({**data, "server": {"port": 9000}}))
+    context = Experiment(parse_config({**data, "server": {"args": {"max_model_len": 4096}}}))
+    assert fingerprint(old) == fingerprint(moved)
+    assert fingerprint(old) != fingerprint(context)
+
+
+def test_sequential_config_rejects_output_collisions():
+    with pytest.raises(ValueError, match="labels únicos"):
+        parse_config(
+            {
+                "experiment": "x",
+                "models": [{"name": name, "type": "base"} for name in ("a/b", "a__b")],
+                "benchmarks": ["belebele_pt"],
+            }
+        )
+
+
+def test_openai_key_is_only_inferred_for_the_official_endpoint(monkeypatch):
+    from pt_lm_eval.experiment.config import ModelConfig
+
+    monkeypatch.setenv("OPENAI_API_KEY", "provider-key")
+    monkeypatch.setenv("TEST_API_KEY", "custom-key")
+    local = "http://127.0.0.1:8000/v1"
+    model = ModelConfig("m", "instruct")
+    assert Client.for_model(model, local, None).api_key is None
+    assert Client.for_model(model, "https://api.openai.com/v1", None).api_key == "provider-key"
+    custom = ModelConfig("m", "api", base_url=local, api_key_env="TEST_API_KEY")
+    assert Client.for_model(custom, local, None).api_key == "custom-key"
 
 
 def test_http_pool_supports_concurrency_above_100():
@@ -292,7 +324,7 @@ def test_stop_sequences_only_without_chat(monkeypatch):
 def test_thinking_flag_names_the_run_and_reaches_the_chat_template(monkeypatch):
     import asyncio
 
-    base = {"experiment": "x", "benchmarks": ["energy_regulacao"]}
+    base = {"experiment": "x", "benchmarks": ["belebele_pt"]}
     on, off = parse_config(
         {
             **base,
@@ -337,13 +369,13 @@ def test_fewshot_as_multiturn_applies_only_to_chat_generation_with_shots():
             "num_fewshot": 2,
             "models": [{"name": "i", "type": "instruct"}, {"name": "b", "type": "base"}],
             "benchmarks": [
-                "energy_regulacao",
-                {"name": "mmmlu_pt_br", "evaluations": ["gen"], "num_fewshot": 0},
+                "belebele_pt",
+                {"name": "global_piqa_nonparallel_pt_br", "evaluations": ["gen"], "num_fewshot": 0},
             ],
         }
     )
     multiturn = {(s.model.name, s.benchmark, s.evaluation) for s in cfg.plan() if s.fewshot_as_multiturn}
-    assert multiturn == {("i", "energy_regulacao", "gen")}
+    assert multiturn == {("i", "belebele_pt", "gen")}
 
 
 def test_fingerprint_ignores_fields_left_at_default():
@@ -351,7 +383,7 @@ def test_fingerprint_ignores_fields_left_at_default():
         {
             "experiment": "x",
             "models": [{"name": "m", "type": "base", "generate": {}}],
-            "benchmarks": ["energy_regulacao"],
+            "benchmarks": ["belebele_pt"],
         }
     )
     assert non_default(cfg.models[0]) == {"name": "m", "type": "base"}
@@ -404,7 +436,7 @@ def test_failed_model_is_skipped_and_the_rest_still_runs(monkeypatch, tmp_path):
             "experiment": "x",
             "output_dir": str(tmp_path),
             "models": [{"name": "quebrado", "type": "base"}, {"name": "ok", "type": "base"}],
-            "benchmarks": [{"name": "energy_regulacao", "evaluations": ["mcf"]}],
+            "benchmarks": [{"name": "belebele_pt", "evaluations": ["mcf"]}],
         }
     )
     ran = []
@@ -497,6 +529,42 @@ def test_dry_run_length_check_flags_generation_that_does_not_fit(monkeypatch):
     assert "1 itens não cabem" in gen.row()[-1]
 
 
+def test_dry_run_reports_failure_to_the_shell(monkeypatch):
+    _memory_benchmark()
+    cfg = parse_config(
+        {"experiment": "x", "models": [{"name": "m", "type": "instruct"}], "benchmarks": ["_contexto_teste"]}
+    )
+    monkeypatch.setattr("pt_lm_eval.cli.load_config", lambda path: cfg)
+    monkeypatch.setattr(Experiment, "dry_run", lambda self: False)
+    assert main(["run", "exemplo.yaml", "--dry-run"]) == 1
+
+
+def test_generation_error_does_not_count_as_an_answer_and_is_retried(tmp_path):
+    import asyncio
+
+    _memory_benchmark()
+    cfg = parse_config(
+        {
+            "experiment": "x",
+            "output_dir": str(tmp_path),
+            "models": [{"name": "m", "type": "instruct"}],
+            "benchmarks": [{"name": "_contexto_teste", "evaluations": ["gen"]}],
+        }
+    )
+    exp = Experiment(cfg)
+    (step,) = exp.steps
+
+    class FailingBackend:
+        async def generate(self, requests):
+            return [GenerateResponse("Resposta: A"), GenerateResponse("", error="HTTP 503")]
+
+    with pytest.raises(GenerationError, match="HTTP 503"):
+        asyncio.run(exp.run_step(step, FailingBackend()))
+    assert not exp.results.paths(step)[1].exists()
+    result = asyncio.run(exp.run_step(step, _FakeBackend(text="Resposta: A")))
+    assert result["timing"]["items_resumed"] == result["timing"]["items_run"] == 1
+
+
 def test_timing_is_recorded_and_accumulates_across_resumes(monkeypatch, tmp_path):
     import asyncio
     import json
@@ -532,14 +600,14 @@ def test_benchmark_parameters_override_the_general_ones():
         {
             **general,
             "benchmarks": [
-                {"name": "energy_regulacao", "evaluations": ["mcf"]},
+                {"name": "belebele_pt", "evaluations": ["mcf"]},
                 {"name": "mmmlu_pt_br", "evaluations": ["mcf"], "limit": "all", "num_fewshot": 0},
                 {"name": "ifeval_pt", "limit": 10},
             ],
         }
     )
     got = {s.benchmark: (s.limit, s.num_fewshot) for s in cfg.plan() if not s.skip_reason}
-    assert got == {"energy_regulacao": (100, 3), "mmmlu_pt_br": (None, 0)}
+    assert got == {"belebele_pt": (100, 3), "mmmlu_pt_br": (None, 0)}
     with pytest.raises(ValueError, match="'all'"):
         parse_config({**general, "benchmarks": [{"name": "ifeval_pt", "limit": "tudo"}]})
 
@@ -554,9 +622,9 @@ def test_evaluations_follow_the_model_type():
                 {"name": "a", "type": "api", "base_url": "http://x"},
             ],
             "benchmarks": [
-                "energy_regulacao",
+                "belebele_pt",
                 "ifeval_pt",
-                {"name": "mmmlu_pt_br", "evaluations": ["cf", "gen"]},
+                {"name": "mmmlu_pt_br", "evaluations": ["mcf"]},
             ],
         }
     )
@@ -564,13 +632,19 @@ def test_evaluations_follow_the_model_type():
     for s in cfg.plan():
         plan.setdefault(s.model.name, []).append(s.skip_reason or f"{s.benchmark}/{s.evaluation}")
     assert plan["b"] == [
-        "energy_regulacao/mcf",
-        "energy_regulacao/cf",
+        "belebele_pt/mcf",
+        "belebele_pt/cf",
         "não se aplica a modelos base",
-        "mmmlu_pt_br/cf",
+        "mmmlu_pt_br/mcf",
     ]
-    assert plan["i"] == ["energy_regulacao/gen", "ifeval_pt/ifeval", "mmmlu_pt_br/gen"]
-    assert plan["a"] == plan["i"]
+    assert plan["i"] == [
+        "belebele_pt/mcf",
+        "belebele_pt/cf",
+        "belebele_pt/gen",
+        "ifeval_pt/ifeval",
+        "mmmlu_pt_br/mcf",
+    ]
+    assert plan["a"] == ["belebele_pt/gen", "ifeval_pt/ifeval", "não se aplica a modelos api"]
 
 
 def test_answer_letter_is_never_mistaken_for_option_text():

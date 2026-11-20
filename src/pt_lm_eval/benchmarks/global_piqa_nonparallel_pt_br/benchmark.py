@@ -1,9 +1,13 @@
-from ..base import ColumnBenchmark, Columns, HFDataset
+from ..base import Columns, HFDataset
+from ..mcq_protocol import GroupedMCQBenchmark
 
 
-class GlobalPIQANonparallelPtBr(ColumnBenchmark):
+class GlobalPIQANonparallelPtBr(GroupedMCQBenchmark):
     name = "global_piqa_nonparallel_pt_br"
-    version = "1.0"
+    version = "2.1"
+    evaluations = ("cf", "gen")
+    fewshot_sampler = "default"
+    base_generation_evaluations = ("gen",)
     description = "Global PIQA nonparallel em português brasileiro, 100 questões de senso comum cultural."
     source = HFDataset(
         "mrlbenchmarks/global-piqa-nonparallel",
@@ -17,4 +21,5 @@ class GlobalPIQANonparallelPtBr(ColumnBenchmark):
         options=["solution0", "solution1"],
         answer="label",
         answer_is="index",
+        protocol="global_piqa",
     )

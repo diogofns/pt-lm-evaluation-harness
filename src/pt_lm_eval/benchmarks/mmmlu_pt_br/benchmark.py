@@ -1,10 +1,13 @@
-from ..base import ColumnBenchmark, Columns, HFDataset
+from ..base import Columns, HFDataset
+from ..mcq_protocol import GroupedMCQBenchmark
 
 
-class MMMLUPtBr(ColumnBenchmark):
+class MMMLUPtBr(GroupedMCQBenchmark):
     name = "mmmlu_pt_br"
-    version = "1.1"
+    version = "2.3"
+    evaluations = ("mcf", "gen")
     description = "MMLU traduzido profissionalmente para o português do Brasil (OpenAI MMMLU)."
+    exclude_eval_from_shots = True
     source = HFDataset(
         "openai/MMMLU", subset="PT_BR", split="test", revision="325a01dc3e173cac1578df94120499aaca2e2504"
     )
@@ -14,4 +17,5 @@ class MMMLUPtBr(ColumnBenchmark):
         answer="Answer",
         answer_is="letter",
         subject="Subject",
+        protocol="mmmlu",
     )

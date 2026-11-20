@@ -6,7 +6,7 @@
 - Revisão: `8e6106a6c6ce1c5027e66cc338143cf997b2aa09`.
 - Teste completo: 11.759 questões, 14 matérias, 3–10 alternativas; nenhum item descartado.
 - Few-shot: 70 questões do split `validation`, separado do teste.
-- Gabarito: campo `answer`, como na referência `lm_eval/tasks/mmlu_prox/pt`.
+- Gabarito: campo `answer`, que contém a letra correta.
   O item 3787 tem `answer=C` e `answer_index=1`; usamos a letra C, sem corrigir os dados.
 - As opções nulas são padding final e são omitidas. O texto literal `N/A` dos exemplos
   de validação é preservado, como na referência. `cot_content` não entra nos prompts.

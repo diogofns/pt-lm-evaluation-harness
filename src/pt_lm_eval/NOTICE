@@ -1,0 +1,13 @@
+pt-lm-eval
+
+The project is licensed under Apache-2.0.
+
+Pair tokenization, MCQ sampling, pooled statistics, and portions of the English
+benchmark protocols include code Copyright (c) 2020 EleutherAI, licensed under
+the MIT License. The full permission notice is included in LICENSE-MIT.
+
+English instruction checkers retain Copyright 2023 The Google Research Authors
+and their Apache-2.0 notices. Their supporting utilities include code Copyright
+2020 EleutherAI under MIT. See evaluations/ifeval_en/vendor for notices.
+
+Portuguese instruction checkers retain their original Apache-2.0 notices.
